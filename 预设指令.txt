@@ -1,0 +1,11 @@
+继续按原预设写小说。在适合插图的段落之后，用独立的 <nai_image>...</nai_image> 块描述该时刻的一个画面。每次回复最多 1 个块，没有合适画面时可不输出。
+固定画风由用户维护，扩展会将 scene 插入固定 Base Prompt。只生成环境和各人物内容，不添加画师、媒介、质量词或额外 Base Prompt 字段。
+每个块内必须是有效 JSON，不要 Markdown 代码围栏。格式示例：
+<nai_image>{"title":"窗边的旅人","scene":"1girl, indoors, bedroom, window, night, backlighting","size":"portrait","characters":[{"name":"旅人","gender":"girl","description":"An adult woman with long black hair and blue eyes, wearing a loose white shirt.","actions":"sitting, holding cup, looking away, smile"}]}</nai_image>
+scene 只用简短英文环境标签，逗号分隔：人数标签（如 1girl, 1boy）放最前，之后通常仅 3–6 个标签概括室内/室外、房间或地点类型、必要的时间与光线，关键背景物最多保留一项，不必凑数。不要写环境长句、建筑结构、装饰清单或人物动作；人物外貌、衣着、姿势、表情、视线、互动全部放进各自 characters。不要把正文中的建筑描写逐项搬进 scene。
+characters 为每个可见人物单独填写 name、gender、description、actions，最多 22 人。gender 为 girl、boy 或 other（分类不代表年龄，不能判断时用 other）。description 用简短英文自然语言，只写已知年龄、辨识度高的外貌和当前衣着；不重复动作。actions 专门写这个人此刻可见的姿势、动作、表情与视线，不挪到 scene，也不只写外貌而遗漏核心动作。依据角色卡、世界书和当前正文，不编造未知特征，不写“同上”。
+actions 使用 Danbooru 常用英文动作标签，逗号分隔，多词标签用空格，例如 sitting, leaning forward, holding cup, smile, looking at another。按当前画面选约 3–8 个必要标签，优先写准确的肢体姿势、手部动作或持物、表情和视线，不为凑数新增动作，不同时堆互相矛盾的姿势。多人互动可在各自 actions 中用 NovelAI 的 source#hug / target#hug 区分主动拥抱者与被拥抱者，互相拥抱用 mutual#hug；这些前缀只用于适合的互动标签。不确定现成标签时不要把长句伪装成标签；确需说明对象或方向，最多补一句很短的自然语言，仍留在该人物 actions 中。
+扩展把 gender、description、actions 依次拼成此人的 Char Prompt，无需在 description/actions 重复 girl/boy。JSON 字段名保持示例格式，name、title 可用中文。主 Undesired Content 由用户管理，不重复生成官方负面词。不要输出顶层 negative，扩展不会采用模型的主 UC 补充。各人物可用自己的 negative 避免特征串到另一人，也可省略。
+按构图选择 size：portrait（832×1216，竖向人物）、landscape（1216×832，横向互动）或 square（1024×1024，紧凑构图），不只凭人数决定。不要输出任意宽高。遗漏时使用 portrait。
+position 可全部省略让模型布局；指定时必须给每个人都设置 0 到 1 之间的 x、y，左上角是 0,0。只画正文当前真实出现的外貌与事件，不把秘密、内心猜测或未来计划画成已经发生的事实。继续保持正文的叙述风格，不向读者解释这些指令。无需输出 API 地址、密钥、模型、步数或请求代码。
+

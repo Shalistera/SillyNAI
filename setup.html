@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NovelAI 小说配图 · 本地设置</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #e8ece7; background: #111915; }
+    * { box-sizing: border-box; } body { margin: 0; } main { max-width: 980px; margin: 0 auto; padding: 48px 24px; }
+    .eyebrow { color: #a2c6b0; font-size: 13px; letter-spacing: .14em; } h1 { font-size: clamp(28px, 4vw, 42px); letter-spacing: -.04em; margin: 14px 0; } p { line-height: 1.7; color: #b7c5bd; }
+    section { background: #1a251f; border: 1px solid #34443a; border-radius: 16px; padding: 24px; margin: 24px 0; } h2 { margin-top: 0; font-size: 20px; }
+    label { display: block; margin: 12px 0; line-height: 1.6; } input, textarea, select { font: inherit; color: inherit; background: #111b15; border: 1px solid #496152; border-radius: 7px; padding: 11px; } input[type=password], textarea { width: 100%; } textarea { font: 13px/1.7 ui-monospace, monospace; resize: vertical; }
+    button, .button { display: inline-block; border: 1px solid #6e927b; border-radius: 7px; background: #b5dac2; color: #17281e; padding: 11px 16px; cursor: pointer; font: 600 14px inherit; text-decoration: none; } button.secondary, .button.secondary { background: transparent; color: #d0e7d8; } button:disabled { opacity: .45; cursor: wait; }
+    a { color: #bbdfcb; } .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; } .status { white-space: pre-wrap; line-height: 1.7; margin-top: 16px; padding: 12px; border-radius: 8px; background: #111b15; color: #bcd5c6; } .status.error { color: #ffc5ac; } small { color: #9aafa1; line-height: 1.6; display: block; } #preview img { display: block; max-width: 100%; max-height: 850px; margin: 20px auto; border-radius: 12px; } code { color: #dfeddd; }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">SILLYTAVERN × NOVELAI V5</div>
+  <h1>让小说的画面，出现在段落之间。</h1>
+  <p>在这台酒馆上连接你的 NovelAI 账号并测试一张插图。写小说仍使用你原来的文字模型。</p>
+  <section>
+    <h2>1 · 连接账号</h2>
+    <p>从 NovelAI 的 Settings → Account → Get Persistent API Token 获取密钥，然后粘贴到下面。密钥保存到当前酒馆用户的服务端密钥库。</p>
+    <label>NovelAI API Key<input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="已有酒馆密钥时可直接检查连接"></label>
+    <div class="row"><button id="save-key">保存密钥</button><button id="check" class="secondary">检查连接与额度</button><a href="https://docs.novelai.net/en/text/usersettings/account/" target="_blank" rel="noopener">获取密钥说明 ↗</a></div>
+    <div id="account-status" class="status" role="status">正在检查本地服务…</div>
+  </section>
+  <section>
+    <h2>2 · 测试一张插图</h2>
+    <p>这个按钮只调用 NovelAI 图片 API，无须先配置文字模型。成功后，图片会保存在酒馆的用户图库中。</p>
+    <div class="row"><label>绘图模型 <select id="model"><option value="nai-diffusion-5-full">V5 Full</option><option value="nai-diffusion-5-curated">V5 Curated</option></select></label></div>
+    <label>本次测试的固定 Base Prompt<textarea id="base-prompt" rows="3" placeholder="填写固定画风；{{scene}} 为场景插入位置，不填写占位符则追加场景。"></textarea></label>
+    <label>本次测试的质量标签<select id="quality"><option value="light">轻量</option><option value="standard">标准</option><option value="none">不添加</option></select></label>
+    <div class="row">
+      <label>本次测试的比例模式<select id="size-mode"><option value="auto">跟随场景 JSON 的 size</option><option value="fixed">固定为我的选择</option></select></label>
+      <label><span id="size-label">备用比例</span><select id="size"><option value="portrait">832 × 1216 竖图</option><option value="landscape">1216 × 832 横图</option><option value="square">1024 × 1024 方图</option></select></label>
+    </div>
+    <label>主 Undesired Content<select id="uc-preset"></select></label>
+    <small id="uc-hint"></small>
+    <label><span id="negative-label">自定义追加 UC</span><textarea id="negative" rows="2"></textarea></label>
+    <label><input id="allow-scene-negative" type="checkbox"> 允许采用场景 JSON 的主 UC 补充</label>
+    <label>画面描述<textarea id="scene" rows="12" spellcheck="false"></textarea></label>
+    <small>scene 只写少量环境标签。每个人物的 description 写外貌衣着，actions 写动作、姿势、表情和视线；示例采用 Danbooru 动作标签。小说生成时的动作写法可在酒馆扩展设置中切换。</small>
+    <details><summary>预览最终 Base / Char（不出图）</summary><pre id="prompt-preview" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7"></pre></details>
+    <small>这里的固定 Base 仅用于这次测试。小说自动配图的固定 Base 请在酒馆扩展设置中填写。</small>
+    <label><input id="allow-anlas" type="checkbox"> 允许这次测试消耗 Anlas</label>
+    <small>仅使用三种常规尺寸，采用 23 步、单张图片。默认检查 Opus 与 V5 免费额度；实际尺寸和主 UC 见上方预览，计费以 NovelAI 为准。</small>
+    <div class="row" style="margin-top:16px"><button id="generate">生成一张测试图片</button><button id="cancel" class="secondary" disabled>取消等待</button></div>
+    <div id="image-status" class="status" role="status">等待测试。</div>
+    <div id="preview"></div>
+  </section>
+  <section>
+    <h2>3 · 回到小说</h2>
+    <p>打开酒馆「扩展 → NovelAI 小说配图」。默认已经启用绘图要求，模型会在小说中输出 <code>&lt;nai_image&gt;</code> 指令。勾选「回复完成后自动出图」即可自动配图；也可以保留手动生成。</p>
+    <small>如果你想自己修改预设，可关闭「自动向文字模型加入绘图要求」，并使用扩展里的「复制预设指令」。这两种方式使用同一套图片接口。</small>
+    <p><a class="button secondary" href="/">打开酒馆 →</a></p>
+  </section>
+</main><script type="module" src="/scripts/extensions/third-party/novelai-story-illustrator/setup.js"></script></body>
+</html>

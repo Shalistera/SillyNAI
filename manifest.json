@@ -1,0 +1,11 @@
+{
+  "display_name": "NovelAI 小说配图",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "Local development",
+  "version": "0.4.0",
+  "minimum_client_version": "1.19.0"
+}

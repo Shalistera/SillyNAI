@@ -1,0 +1,25 @@
+.nai-story-settings { margin-bottom: 12px; }
+.nai-story-settings label:not(.checkbox_label) { display: block; margin: 8px 0; }
+.nai-story-settings small { display: block; opacity: .75; margin: 4px 0 10px; line-height: 1.5; }
+.nai-story-settings .inline-drawer-content > p { line-height: 1.6; }
+.nai-story-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+.nai-story-grid input, .nai-story-grid select { width: 100%; }
+#nai-story-status { font-size: .9em; margin: 12px 0; }
+:is(.nai-story-card, .custom-nai-story-card) { margin: 18px 0; padding: 12px; border: 1px solid var(--SmartThemeBorderColor, #7776); border-radius: 10px; background: #0001; clear: both; }
+:is(.nai-story-card, .custom-nai-story-card) img { display: block; width: auto; max-width: 100%; max-height: 640px; margin: 10px auto; border-radius: 6px; }
+:is(.nai-story-caption, .custom-nai-story-caption) { font-weight: 600; }
+:is(.nai-story-note, .custom-nai-story-note) { font-size: .85em; opacity: .75; line-height: 1.5; margin: 7px 0; overflow-wrap: anywhere; }
+:is(.nai-story-actions, .custom-nai-story-actions) { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.nai-story-actions .menu_button { width: auto; margin: 0; }
+.custom-nai-story-actions button { border: 1px solid var(--SmartThemeBorderColor, #888); border-radius: 6px; padding: 5px 12px; color: inherit; background: #7772; cursor: pointer; font: inherit; font-size: .85em; }
+.custom-nai-story-actions button:disabled { opacity: .45; cursor: wait; }
+.nai-story-editor { width: min(820px, 92vw); max-height: 88vh; border: 1px solid #888; border-radius: 12px; padding: 24px; background: #222730; color: #edf1f5; }
+.nai-story-editor::backdrop { background: #0009; }
+.nai-story-editor textarea { width: 100%; box-sizing: border-box; resize: vertical; background: #14181d; color: inherit; padding: 12px; border: 1px solid #667; border-radius: 6px; font: 14px/1.6 monospace; }
+.nai-story-editor button { border: 1px solid #778; border-radius: 6px; background: #364452; color: inherit; padding: 9px 14px; cursor: pointer; }
+.nai-story-editor-error { color: #ffb5a7; margin: 10px 0; }
+.nai-story-editor summary { cursor: pointer; margin: 12px 0; }
+.nai-prompt-preview h4 { margin: 18px 0 6px; font-size: 14px; color: #b9d4c5; }
+.nai-prompt-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #14181d; border: 1px solid #465249; border-radius: 6px; padding: 12px; font: 13px/1.7 ui-monospace, monospace; color: #eef3ee; }
+.nai-uc-text { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, monospace; padding: 10px; background: #0002; border-radius: 6px; }
+@media (max-width: 480px) { .nai-story-grid { grid-template-columns: 1fr; } .nai-story-editor { padding: 14px; } }
