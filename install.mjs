@@ -25,7 +25,7 @@ catch (error) {
 const config = YAML.parseDocument(original);
 if (config.errors.length) throw new Error('config.yaml 解析失败，请先修复配置。');
 const targets = [
-    { dir: path.join(target, 'public/scripts/extensions/third-party/novelai-story-illustrator'), files: ['package.json', 'manifest.json', 'index.js', 'shared.js', 'uc-presets.js', 'queue.js', 'settings.html', 'style.css', 'setup.js'] },
+    { dir: path.join(target, 'public/scripts/extensions/third-party/novelai-story-illustrator'), files: ['package.json', 'manifest.json', 'index.js', 'editor.js', 'editor-state.js', 'shared.js', 'uc-presets.js', 'queue.js', 'settings.html', 'style.css', 'setup.js'] },
     { dir: path.join(target, 'plugins/novelai-story-illustrator'), files: ['package.json', 'server.mjs', 'service.mjs', 'shared.js', 'uc-presets.js', 'setup.html'] },
 ];
 for (const destination of targets) {

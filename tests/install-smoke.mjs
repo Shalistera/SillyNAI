@@ -27,7 +27,7 @@ try {
     const backups = await fs.readdir(path.join(target, 'backups'));
     assert.equal(backups.length, 1);
     assert.equal(await fs.readFile(path.join(target, 'backups', backups[0]), 'utf8'), original);
-    for (const file of ['plugins/novelai-story-illustrator/server.mjs', 'plugins/novelai-story-illustrator/service.mjs', 'plugins/novelai-story-illustrator/uc-presets.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/index.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/uc-presets.js']) {
+    for (const file of ['plugins/novelai-story-illustrator/server.mjs', 'plugins/novelai-story-illustrator/service.mjs', 'plugins/novelai-story-illustrator/uc-presets.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/index.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/editor.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/editor-state.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/uc-presets.js']) {
         assert.equal(await fs.readFile(path.join(target, file), 'utf8'), await fs.readFile(path.join(source, path.basename(file)), 'utf8'));
     }
     console.log('Installer smoke test passed: both components copied, repeated install safe, config preserved, backup correct, user data untouched.');

@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { InputError, buildPayload, normalizeOptions, freeGenerationBlockReason } from './shared.js';
+import { InputError, buildPayload, normalizeOptions, normalizeImageOverrides, freeGenerationBlockReason } from './shared.js';
 
 const API = 'https://image.novelai.net';
 
@@ -40,13 +40,14 @@ export function createService({ fetch, saveImage, extractPng, timeoutMs = 180000
         };
     }
 
-    async function generate({ user, key, requestId, scene, options, signal }) {
+    async function generate({ user, key, requestId, scene, options, imageOverrides, signal }) {
         if (!key) throw new InputError('请先保存 NovelAI API Key。', 401);
         if (!/^[\da-f-]{36}$/i.test(requestId ?? '')) throw new InputError('缺少有效请求编号。');
         const validated = normalizeOptions(options);
-        const payload = buildPayload(scene, validated, seed());
+        const overrides = normalizeImageOverrides(imageOverrides);
+        const payload = buildPayload(scene, validated, seed(), overrides);
         const jobId = `${user}:${requestId}`;
-        const signature = JSON.stringify({ scene, options });
+        const signature = JSON.stringify({ scene, options, imageOverrides: overrides });
         if (completed.has(jobId)) {
             const previous = completed.get(jobId);
             if (previous.signature !== signature) throw new InputError('请求编号已被另一组参数使用。', 409);

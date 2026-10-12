@@ -65,6 +65,23 @@ test('completed request id is idempotent, reuse with other parameters is rejecte
     await assert.rejects(f.service.generate({ ...job, scene: { scene: 'different' } }), /编号/);
 });
 
+test('server sends edited main prompts verbatim and includes image overrides in request identity', async () => {
+    const f = fixture();
+    const job = input({ imageOverrides: { base: '1girl, ink drawing, outdoors', negative: '', size: 'square' } });
+    await f.service.generate(job);
+    const payload = JSON.parse(f.calls[1].init.body);
+    assert.equal(payload.input, job.imageOverrides.base);
+    assert.equal(payload.parameters.v4_prompt.caption.base_caption, job.imageOverrides.base);
+    assert.equal(payload.parameters.negative_prompt, '');
+    assert.equal(payload.parameters.tag_hint_uc_preset, 0);
+    assert.equal(payload.parameters.width, 1024);
+    await f.service.generate(structuredClone(job));
+    assert.equal(f.calls.length, 2);
+    for (const imageOverrides of [{ ...job.imageOverrides, base: 'different' }, { ...job.imageOverrides, negative: 'text' }, { ...job.imageOverrides, size: 'landscape' }]) {
+        await assert.rejects(f.service.generate({ ...job, imageOverrides }), /编号/);
+    }
+});
+
 test('exhausted quota blocks generation until the user explicitly allows Anlas', async () => {
     const f = fixture(url => url.endsWith('/subscription') ? json({ ...account, usage: { percent: -1, isNegative: true } }) : json({ images: [{ image: png.toString('base64') }] }));
     await assert.rejects(f.service.generate(input()), /已停止出图/);

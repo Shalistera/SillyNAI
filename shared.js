@@ -1,7 +1,7 @@
 import { UC_PRESETS } from './uc-presets.js';
 export { UC_PRESETS, UC_SOURCE } from './uc-presets.js';
 export const ID = 'novelai-story-illustrator';
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 export const STATE_KEY = 'nai_story_illustrator';
 export const MODELS = ['nai-diffusion-5-full', 'nai-diffusion-5-curated'];
 export const SIZES = { portrait: [832, 1216], landscape: [1216, 832], square: [1024, 1024] };
@@ -76,7 +76,7 @@ export function normalizeScene(value) {
                 person.description = string(item.description, '人物外貌描述', 8000, true);
             } else {
                 // Keep existing chats and user presets written for 0.1 compatible.
-                person.prompt = string(item.prompt, '人物提示词', 8000, true);
+                person.prompt = string(item.prompt, '人物提示词', 16000, true);
             }
             // Actions belong only to this character; older chats can omit them.
             if (item.actions != null) person.actions = string(item.actions, '人物动作', 4000);
@@ -165,16 +165,35 @@ export function parseBlocks(text) {
     return result;
 }
 
-export function composePrompts(sceneInput, optionInput) {
+// Per-image overrides come from the editor, separately from model-written JSON.
+export function normalizeImageOverrides(value = {}) {
+    object(value, '本图设置');
+    const result = {};
+    for (const [key, label, max] of [['base', '本图主提示词', 32000], ['negative', '本图主负面词', 24000]]) {
+        if (Object.hasOwn(value, key)) {
+            if (typeof value[key] !== 'string') throw new InputError(`${label} 必须是文本。`);
+            if (value[key].length > max) throw new InputError(`${label} 不能超过 ${max} 个字符。`);
+            result[key] = value[key];
+        }
+    }
+    if (Object.hasOwn(value, 'size')) {
+        if (!Object.hasOwn(SIZES, value.size)) throw new InputError('本图比例只支持 portrait、landscape、square。');
+        result.size = value.size;
+    }
+    return result;
+}
+
+export function composePrompts(sceneInput, optionInput, imageOverrides = {}) {
     const scene = normalizeScene(sceneInput);
     const options = normalizeOptions(optionInput);
+    const overrides = normalizeImageOverrides(imageOverrides);
     const quality = { none: '', light: 'very aesthetic, amazing quality, no text', standard: 'very aesthetic, masterpiece, no text' }[options.quality];
     // Use a replacement function so $&, $`, and $' in story text remain literal.
     const base = options.basePrompt.includes('{{scene}}')
         ? options.basePrompt.replace('{{scene}}', () => scene.scene)
         : [options.basePrompt, scene.scene].filter(Boolean).join(', ');
-    const prompt = [base, quality].filter(Boolean).join(', ');
-    const negative = [UC_PRESETS[options.ucPreset].text, options.negative, options.allowSceneNegative ? scene.negative : ''].filter(Boolean).join(', ');
+    const prompt = overrides.base ?? [base, quality].filter(Boolean).join(', ');
+    const negative = overrides.negative ?? [UC_PRESETS[options.ucPreset].text, options.negative, options.allowSceneNegative ? scene.negative : ''].filter(Boolean).join(', ');
     const characters = scene.characters.map(person => ({
         name: person.name,
         prompt: [person.description != null ? `${person.gender}, ${person.description}` : person.prompt, person.actions].filter(Boolean).join(', '),
@@ -184,20 +203,22 @@ export function composePrompts(sceneInput, optionInput) {
     return { base: prompt, negative, characters };
 }
 
-export function resolveImageSize(sceneInput, optionInput) {
+export function resolveImageSize(sceneInput, optionInput, imageOverrides = {}) {
     const scene = normalizeScene(sceneInput);
     const options = normalizeOptions(optionInput);
-    const source = options.sizeMode === 'fixed' ? 'fixed' : scene.size ? 'model' : 'fallback';
-    const preset = options.sizeMode === 'fixed' ? options.size : scene.size ?? options.size;
+    const overrides = normalizeImageOverrides(imageOverrides);
+    const source = overrides.size ? 'image' : options.sizeMode === 'fixed' ? 'fixed' : scene.size ? 'model' : 'fallback';
+    const preset = overrides.size ?? (options.sizeMode === 'fixed' ? options.size : scene.size ?? options.size);
     const [width, height] = SIZES[preset];
     return { preset, width, height, source };
 }
 
-export function buildPayload(sceneInput, optionInput, randomSeed) {
+export function buildPayload(sceneInput, optionInput, randomSeed, imageOverrides = {}) {
     const scene = normalizeScene(sceneInput);
     const options = normalizeOptions(optionInput);
-    const { width, height } = resolveImageSize(scene, options);
-    const prompts = composePrompts(scene, options);
+    const overrides = normalizeImageOverrides(imageOverrides);
+    const { width, height } = resolveImageSize(scene, options, overrides);
+    const prompts = composePrompts(scene, options, overrides);
     const caption = field => prompts.characters.map(person => ({ char_caption: person[field], centers: [person.position ?? { x: 0.5, y: 0.5 }] }));
     const seed = options.seed === -1 ? number(randomSeed, '随机种子', 0, 4294967295, true) : options.seed;
     return {
@@ -222,7 +243,7 @@ export function buildPayload(sceneInput, optionInput, randomSeed) {
             },
             qualityToggle: false,
             ucPreset: 0,
-            tag_hint_uc_preset: UC_PRESETS[options.ucPreset].hint,
+            tag_hint_uc_preset: Object.hasOwn(overrides, 'negative') ? 0 : UC_PRESETS[options.ucPreset].hint,
             cfg_rescale: 0,
             sm: false,
             sm_dyn: false,

@@ -43,7 +43,7 @@ export async function init(router) {
         }
     };
     router.get('/status', wrap(async (req, res) => {
-        res.json({ version: VERSION, promptSchema: 3, generationPolicy: 3, keySaved: Boolean(readSecret(req.user.directories, SECRET_KEYS.NOVEL)) });
+        res.json({ version: VERSION, promptSchema: 3, generationPolicy: 4, keySaved: Boolean(readSecret(req.user.directories, SECRET_KEYS.NOVEL)) });
     }));
     router.post('/key', wrap(async (req, res) => {
         const key = req.body?.key;
@@ -66,7 +66,7 @@ export async function init(router) {
             const result = await service.generate({
                 user, key: readSecret(req.user.directories, SECRET_KEYS.NOVEL),
                 requestId: req.body?.requestId, scene: req.body?.scene,
-                options: req.body?.options, signal: controller.signal,
+                options: req.body?.options, imageOverrides: req.body?.imageOverrides, signal: controller.signal,
             });
             if (!res.destroyed) res.json(result);
         } finally {

@@ -1,5 +1,6 @@
-import { ID, STATE_KEY, UC_PRESETS, normalizeOptions, normalizeScene, parseBlocks, composePrompts, resolveImageSize, promptInstruction, makeExampleScene } from './shared.js';
+import { ID, STATE_KEY, UC_PRESETS, normalizeOptions, parseBlocks, composePrompts, resolveImageSize, promptInstruction, makeExampleScene } from './shared.js';
 import { ImageQueue, sameTarget, GenerationTracker } from './queue.js';
+import { openImageEditor } from './editor.js';
 
 const context = () => SillyTavern.getContext();
 const queue = new ImageQueue();
@@ -15,7 +16,9 @@ const settings = () => context().extensionSettings[STATE_KEY];
 const sceneState = message => message.extra?.[STATE_KEY];
 function ensureState(message) {
     message.extra ??= {};
-    return message.extra[STATE_KEY] ??= { images: {}, overrides: {}, attempts: {} };
+    const state = message.extra[STATE_KEY] ??= {};
+    for (const key of ['images', 'overrides', 'attempts', 'imageOverrides']) state[key] ??= {};
+    return state;
 }
 
 async function api(route, body, signal) {
@@ -66,14 +69,14 @@ function renderCard(block, message, index) {
     const busy = status === 'queued' || status === 'running';
     const imageUrl = localUrl(record?.url);
     const error = state?.attempts?.[block.key]?.error;
-    const size = scene ? resolveImageSize(scene, settings()) : null;
+    const size = scene ? resolveImageSize(scene, settings(), state?.imageOverrides?.[block.key]) : null;
     const messageText = status === 'running' ? '正在生成…' : status === 'queued' ? '等待出图…'
         : error || (!scene ? block.error : (imageUrl ? `${record.model.replace('nai-diffusion-', 'V')} · ${record.width} × ${record.height} · 种子 ${record.seed}` : `画面已准备好 · ${size.width} × ${size.height}`));
     return `\n\n<div class="nai-story-card" data-nai-key="${escape(block.key)}" data-nai-index="${index}">
 <div class="nai-story-caption">${escape(label)}</div>
 ${imageUrl ? `<a href="/${escape(imageUrl.replace(/^\//, ''))}" target="_blank" rel="noopener"><img src="/${escape(imageUrl.replace(/^\//, ''))}" alt="${escape(label)}" loading="lazy"></a>` : ''}
 <div class="nai-story-note">${escape(messageText)}</div>
-<div class="nai-story-actions"><button type="button" class="menu_button" data-nai-action="generate" ${busy || !scene ? 'disabled' : ''}>${imageUrl ? '重画' : '生成'}</button><button type="button" class="menu_button" data-nai-action="edit" ${busy ? 'disabled' : ''}>编辑画面</button>${busy ? '<button type="button" class="menu_button" data-nai-action="cancel">取消</button>' : ''}</div></div>\n\n`;
+<div class="nai-story-actions"><button type="button" class="menu_button" data-nai-action="generate" ${busy || !scene ? 'disabled' : ''}>${imageUrl ? '重画' : '生成'}</button><button type="button" class="menu_button" data-nai-action="edit" ${busy ? 'disabled' : ''}>编辑图片</button>${busy ? '<button type="button" class="menu_button" data-nai-action="cancel">取消</button>' : ''}</div></div>\n\n`;
 }
 
 function formatMessage(text, metadata) {
@@ -95,6 +98,8 @@ function enqueueImage(index, block, automatic = false) {
     const scene = state.overrides[block.key] ?? block.scene;
     if (!scene || (automatic && (state.images[block.key] || state.attempts[block.key]))) return;
     const options = structuredClone(settings());
+    const imageOverrides = structuredClone(state.imageOverrides[block.key] ?? {});
+    const sceneSnapshot = structuredClone(scene);
     const id = `${String(target.characterId)}:${String(target.groupId)}:${target.chatId}:${index}:${target.swipe}:${block.key}`;
     const statusKey = id;
     const valid = () => settings().enabled && sameTarget(context(), target);
@@ -111,11 +116,11 @@ function enqueueImage(index, block, automatic = false) {
             state.attempts[block.key] = { started: Date.now() };
             await save(target.message);
             if (!valid() || signal.aborted) throw new Error('原消息已变化，取消出图。');
-            return api('generate', { requestId: crypto.randomUUID(), scene, options }, signal);
+            return api('generate', { requestId: crypto.randomUUID(), scene: sceneSnapshot, options, imageOverrides }, signal);
         },
         async complete(result) {
             if (!localUrl(result.url)) throw new Error('返回的图片路径无效。');
-            state.images[block.key] = { ...result, scene, created: Date.now() };
+            state.images[block.key] = { ...result, scene: sceneSnapshot, imageOverrides, prompts: composePrompts(sceneSnapshot, options, imageOverrides), created: Date.now() };
             state.attempts[block.key] = { done: true };
             await save(target.message);
             if (valid()) refresh(index);
@@ -170,89 +175,46 @@ function dispatchGeneratedImages(indices) {
     }
 }
 
-function fillPromptPreview(container, scene) {
-    const prompts = composePrompts(scene, settings());
-    const size = resolveImageSize(scene, settings());
-    container.replaceChildren();
-    const source = { fixed: '按用户固定', model: '按模型选择', fallback: '按备用比例' }[size.source];
-    const sections = [['实际出图尺寸', `${size.width} × ${size.height} · ${source}`], ['最终 Base Prompt', prompts.base]];
-    prompts.characters.forEach((person, index) => {
-        sections.push([`Char ${index + 1}${person.name ? ` · ${person.name}` : ''}`, person.prompt]);
-        if (person.negative) sections.push([`Char ${index + 1} Negative`, person.negative]);
-    });
-    sections.push(['最终主 Undesired Content', prompts.negative || '（空）']);
-    for (const [label, value] of sections) {
-        const heading = document.createElement('h4');
-        heading.textContent = label;
-        const text = document.createElement('pre');
-        text.textContent = value;
-        container.append(heading, text);
-    }
-}
-
-function bindPreview(dialog) {
-    const input = dialog.querySelector('textarea');
-    const output = dialog.querySelector('.nai-prompt-preview');
-    const update = () => {
-        try {
-            fillPromptPreview(output, normalizeScene(JSON.parse(input.value)));
-        } catch (error) {
-            output.textContent = `无法预览：${error.message}`;
-        }
-    };
-    input.addEventListener('input', update);
-    update();
-}
-
 function previewExample() {
-    const dialog = document.createElement('dialog');
-    dialog.className = 'nai-story-editor';
-    dialog.innerHTML = '<h3>Base / Char 拼接预览</h3><p>下方使用当前固定 Base 与示例场景。可修改示例观察拼接结果；预览不调用 API，也不保存到聊天。</p><textarea aria-label="示例画面 JSON" rows="9"></textarea><div class="nai-prompt-preview"></div><button type="button">关闭</button>';
-    dialog.querySelector('textarea').value = JSON.stringify(makeExampleScene(settings()), null, 2);
-    bindPreview(dialog);
-    dialog.querySelector('button').addEventListener('click', () => dialog.close());
-    dialog.addEventListener('close', () => dialog.remove(), { once: true });
-    document.body.append(dialog);
-    dialog.showModal();
+    openImageEditor({ scene: makeExampleScene(settings()), options: settings(), previewOnly: true });
 }
 
 function editScene(index, block) {
     const target = currentTarget(index);
     const state = ensureState(target.message);
-    const dialog = document.createElement('dialog');
-    dialog.className = 'nai-story-editor';
-    dialog.innerHTML = '<h3>编辑这一张插图</h3><p>scene 只写少量环境标签；各人物的 description 写外貌衣着，actions 写动作、表情和视线。固定 Base 使用扩展设置中的值。保存只更新描述，点击“保存并出图”才会重画。</p><textarea aria-label="画面 JSON" rows="12"></textarea><details><summary>预览这次出图的最终 Base / Char</summary><div class="nai-prompt-preview"></div></details><div class="nai-story-editor-error" role="alert"></div><div class="nai-story-actions"><button type="button" data-action="save">保存</button><button type="button" data-action="generate">保存并出图</button><button type="button" data-action="close">关闭</button></div>';
-    dialog.querySelector('textarea').value = JSON.stringify(state.overrides[block.key] ?? block.scene ?? makeExampleScene(settings()), null, 2);
-    bindPreview(dialog);
-    dialog.addEventListener('close', () => dialog.remove(), { once: true });
-    dialog.addEventListener('click', async event => {
-        const action = event.target.closest('button')?.dataset.action;
-        if (!action) return;
-        if (action === 'close') return dialog.close();
-        try {
+    openImageEditor({
+        scene: state.overrides[block.key] ?? block.scene ?? makeExampleScene(settings()),
+        options: settings(), imageOverrides: state.imageOverrides[block.key],
+        async onSave({ scene, imageOverrides, generate }) {
             if (!sameTarget(context(), target)) throw new Error('聊天或原消息已变化，请关闭编辑器后重新打开。');
-            const scene = normalizeScene(JSON.parse(dialog.querySelector('textarea').value));
+            if (['queued', 'running'].includes(statuses.get(statusId(index, block.key)))) throw new Error('这张图正在生成，请完成后再保存编辑。');
+            const previous = { scene: state.overrides[block.key], image: state.imageOverrides[block.key], attempt: state.attempts[block.key] };
             state.overrides[block.key] = scene;
+            state.imageOverrides[block.key] = imageOverrides;
             delete state.attempts[block.key];
-            await save(target.message);
-            dialog.close();
+            try { await save(target.message); }
+            catch (error) {
+                for (const [map, value] of [[state.overrides, previous.scene], [state.imageOverrides, previous.image], [state.attempts, previous.attempt]]) {
+                    if (value === undefined) delete map[block.key];
+                    else map[block.key] = value;
+                }
+                const swipe = target.message.swipe_info?.[target.swipe];
+                if (swipe) swipe.extra = structuredClone(target.message.extra);
+                throw error;
+            }
             if (sameTarget(context(), target)) {
                 refresh(index);
-                if (action === 'generate') enqueueImage(index, block);
+                if (generate) enqueueImage(index, block);
             }
-        } catch (error) {
-            dialog.querySelector('[role="alert"]').textContent = error.message;
-        }
+        },
     });
-    document.body.append(dialog);
-    dialog.showModal();
 }
 
 async function checkStatus() {
     const statusElement = panel.querySelector('#nai-story-status');
     try {
         const status = await api('status');
-        if (!(status.promptSchema >= 3) || !(status.generationPolicy >= 3)) throw new Error('请安装 0.4.0 或更新的服务端插件并重启酒馆，以支持独立人物动作字段。');
+        if (!(status.promptSchema >= 3) || !(status.generationPolicy >= 4)) throw new Error('请安装 0.5.0 或更新的服务端插件并重启酒馆，以支持本图完整提示词编辑。');
         ready = status.keySaved;
         readinessError = '请先在“连接账号 / 测试出图”页面保存 NovelAI API Key。';
         statusElement.textContent = status.keySaved ? '服务端已就绪，API Key 已保存。' : '服务端已就绪；请先连接账号。';
