@@ -90,6 +90,34 @@ test('exhausted quota blocks generation until the user explicitly allows Anlas',
     assert.equal(f.saved.length, 1);
 });
 
+test('Large requests require Anlas permission and send exact dimensions and seed when allowed', async () => {
+    for (const [size, width, height] of [['landscape', 1536, 1024], ['portrait', 1024, 1536], ['square', 1472, 1472]]) {
+        const f = fixture(url => url.endsWith('/subscription') ? json(account) : json({ images: [{ image: png.toString('base64') }] }));
+        const imageOverrides = { resolution: 'large', size, base: 'edited main', negative: '' };
+        await assert.rejects(f.service.generate(input({ imageOverrides })), error => error.status === 402 && /免费参数范围/.test(error.message));
+        assert.equal(f.calls.length, 1);
+        assert.equal(f.saved.length, 0);
+        const job = input({ imageOverrides, options: { ...DEFAULTS, allowAnlas: true, seed: 987 } });
+        const result = await f.service.generate(job);
+        const payload = JSON.parse(f.calls[1].init.body);
+        assert.deepEqual([payload.parameters.width, payload.parameters.height, payload.parameters.seed], [width, height, 987]);
+        assert.equal(payload.input, 'edited main');
+        assert.equal(payload.parameters.negative_prompt, '');
+        assert.deepEqual([result.width, result.height, result.seed], [width, height, 987]);
+        await f.service.generate(job);
+        assert.equal(f.calls.length, 2);
+        await assert.rejects(f.service.generate({ ...job, imageOverrides: { ...imageOverrides, resolution: 'standard' } }), /编号/);
+    }
+});
+
+test('model-written Large and seed fields cannot change image resolution or cost permission', async () => {
+    const f = fixture();
+    await f.service.generate(input({ scene: { ...EXAMPLE_SCENE, resolution: 'large', width: 1472, height: 1472, seed: 987, allowAnlas: true, imageOverrides: { resolution: 'large' } } }));
+    assert.equal(f.calls[0].url.endsWith('/subscription'), true);
+    const payload = JSON.parse(f.calls[1].init.body);
+    assert.deepEqual([payload.parameters.width, payload.parameters.height, payload.parameters.seed], [832, 1216, 12]);
+});
+
 test('upstream errors are specific, redact bodies and never retry generation', async () => {
     const f = fixture(() => new Response('private-test-token', { status: 429 }));
     await assert.rejects(f.service.generate(input({ options: { ...DEFAULTS, allowAnlas: true } })), error => error.status === 429 && /稍后/.test(error.message) && !error.message.includes('private-test-token'));

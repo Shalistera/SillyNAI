@@ -1,6 +1,7 @@
 import { ID, STATE_KEY, UC_PRESETS, normalizeOptions, parseBlocks, composePrompts, resolveImageSize, promptInstruction, makeExampleScene } from './shared.js';
 import { ImageQueue, sameTarget, GenerationTracker } from './queue.js';
-import { openImageEditor } from './editor.js';
+import { openImageEditor, openLargeRedraw } from './editor.js';
+import { createLargeRedraw } from './editor-state.js';
 
 const context = () => SillyTavern.getContext();
 const queue = new ImageQueue();
@@ -76,7 +77,7 @@ function renderCard(block, message, index) {
 <div class="nai-story-caption">${escape(label)}</div>
 ${imageUrl ? `<a href="/${escape(imageUrl.replace(/^\//, ''))}" target="_blank" rel="noopener"><img src="/${escape(imageUrl.replace(/^\//, ''))}" alt="${escape(label)}" loading="lazy"></a>` : ''}
 <div class="nai-story-note">${escape(messageText)}</div>
-<div class="nai-story-actions"><button type="button" class="menu_button" data-nai-action="generate" ${busy || !scene ? 'disabled' : ''}>${imageUrl ? '重画' : '生成'}</button><button type="button" class="menu_button" data-nai-action="edit" ${busy ? 'disabled' : ''}>编辑图片</button>${busy ? '<button type="button" class="menu_button" data-nai-action="cancel">取消</button>' : ''}</div></div>\n\n`;
+<div class="nai-story-actions"><button type="button" class="menu_button" data-nai-action="generate" ${busy || !scene ? 'disabled' : ''}>${imageUrl ? '常规重画' : '生成'}</button>${imageUrl ? `<button type="button" class="menu_button" data-nai-action="large" ${busy || !scene ? 'disabled' : ''}>高清重画</button>` : ''}<button type="button" class="menu_button" data-nai-action="edit" ${busy ? 'disabled' : ''}>编辑图片</button>${busy ? '<button type="button" class="menu_button" data-nai-action="cancel">取消</button>' : ''}</div></div>\n\n`;
 }
 
 function formatMessage(text, metadata) {
@@ -90,20 +91,21 @@ function formatMessage(text, metadata) {
     return text;
 }
 
-function enqueueImage(index, block, automatic = false) {
+function enqueueImage(index, block, automatic = false, largeRedraw = null) {
     if (!settings().enabled) return;
     const target = currentTarget(index);
     if (target.message.is_user || target.message.is_system || !target.chatId) return;
     const state = ensureState(target.message);
     const scene = state.overrides[block.key] ?? block.scene;
     if (!scene || (automatic && (state.images[block.key] || state.attempts[block.key]))) return;
-    const options = structuredClone(settings());
-    const imageOverrides = structuredClone(state.imageOverrides[block.key] ?? {});
+    let options = structuredClone(settings());
+    let imageOverrides = structuredClone(state.imageOverrides[block.key] ?? {});
+    if (largeRedraw) ({ options, imageOverrides } = createLargeRedraw(state.images[block.key], options, imageOverrides, largeRedraw));
     const sceneSnapshot = structuredClone(scene);
     const id = `${String(target.characterId)}:${String(target.groupId)}:${target.chatId}:${index}:${target.swipe}:${block.key}`;
     const statusKey = id;
     const valid = () => settings().enabled && sameTarget(context(), target);
-    queue.enqueue({
+    return queue.enqueue({
         id, index,
         valid,
         onState(status) {
@@ -167,16 +169,37 @@ function onGenerationEnded() {
 }
 
 function dispatchGeneratedImages(indices) {
-    if (!settings().enabled || !settings().automatic) return;
+    const cfg = settings();
+    if (!cfg.enabled) return;
     for (const index of indices) {
         const message = context().chat[index];
         if (!message || message.is_user || message.is_system) continue;
-        for (const block of parseBlocks(message.mes).slice(0, settings().maxImages)) enqueueImage(index, block, true);
+        const blocks = parseBlocks(message.mes).filter(block => block.scene);
+        if (cfg.countMode === 'fixed' && blocks.length !== cfg.maxImages) {
+            toastr.warning(`本条回复要求 ${cfg.maxImages} 张，实际识别到 ${blocks.length} 个有效绘图块。请检查回复是否完整、绘图块格式及预设中的数量要求。`, 'NovelAI 配图数量');
+        }
+        if (cfg.automatic) {
+            for (const block of blocks.slice(0, cfg.maxImages)) enqueueImage(index, block, true);
+        }
     }
 }
 
 function previewExample() {
     openImageEditor({ scene: makeExampleScene(settings()), options: settings(), previewOnly: true });
+}
+
+function redrawLarge(index, block) {
+    const target = currentTarget(index);
+    const record = sceneState(target.message)?.images?.[block.key];
+    if (!record) return;
+    openLargeRedraw({
+        record,
+        onGenerate(parameters) {
+            if (!sameTarget(context(), target)) throw new Error('聊天或原消息已变化，请关闭窗口后重试。');
+            if (sceneState(target.message)?.images?.[block.key] !== record) throw new Error('当前图片已变化，请重新打开高清重画。');
+            if (!enqueueImage(index, block, false, parameters)) throw new Error('未加入队列，请确认扩展已启用且这张图没有正在生成的任务。');
+        },
+    });
 }
 
 function editScene(index, block) {
@@ -214,7 +237,7 @@ async function checkStatus() {
     const statusElement = panel.querySelector('#nai-story-status');
     try {
         const status = await api('status');
-        if (!(status.promptSchema >= 3) || !(status.generationPolicy >= 4)) throw new Error('请安装 0.5.0 或更新的服务端插件并重启酒馆，以支持本图完整提示词编辑。');
+        if (!(status.promptSchema >= 3) || !(status.generationPolicy >= 5)) throw new Error('请安装 0.6.0 或更新的服务端插件并重启酒馆，以支持 Large 高清重画。');
         ready = status.keySaved;
         readinessError = '请先在“连接账号 / 测试出图”页面保存 NovelAI API Key。';
         statusElement.textContent = status.keySaved ? '服务端已就绪，API Key 已保存。' : '服务端已就绪；请先连接账号。';
@@ -227,6 +250,10 @@ async function checkStatus() {
 
 function refreshPolicyControls() {
     const cfg = settings();
+    panel.querySelector('#nai-count-label').textContent = cfg.countMode === 'fixed' ? '每条回复固定几张' : '每条回复最多几张';
+    panel.querySelector('#nai-count-hint').textContent = cfg.countMode === 'fixed'
+        ? `要求模型每条回复输出恰好 ${cfg.maxImages} 个独立绘图块。数量不符时会提示；开启自动出图后，最多依次生成 ${cfg.maxImages} 张。`
+        : `模型按剧情输出 0–${cfg.maxImages} 个绘图块；用户指定数量时需在此上限内。希望稳定要求两张，可选择固定数量并填 2。`;
     panel.querySelector('#nai-size-label').textContent = cfg.sizeMode === 'fixed' ? '固定图片比例' : '模型遗漏时的备用比例';
     panel.querySelector('#nai-negative-label').textContent = cfg.ucPreset === 'custom' ? '自定义主 UC（可留空）' : '自定义追加 UC（可留空）';
     panel.querySelector('#nai-uc-hint').textContent = UC_PRESETS[cfg.ucPreset].description;
@@ -294,6 +321,7 @@ async function init() {
         const block = parseBlocks(message.mes).find(item => item.key === card.dataset.naiKey);
         if (!block) return;
         if (button.dataset.naiAction === 'generate') enqueueImage(index, block);
+        else if (button.dataset.naiAction === 'large') redrawLarge(index, block);
         else if (button.dataset.naiAction === 'edit') editScene(index, block);
         else queue.cancel(job => job.index === index);
     });

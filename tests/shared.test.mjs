@@ -88,6 +88,34 @@ test('preset instruction contains story-specific appearance notes and count limi
     assert.match(value, /<nai_image>/);
 });
 
+test('fixed image counts require separate inline blocks without optional-count instructions', () => {
+    for (let maxImages = 1; maxImages <= 4; maxImages++) {
+        const instruction = promptInstruction({ countMode: 'fixed', maxImages, promptGuidance: '穿插关键互动。' });
+        assert.match(instruction, new RegExp(`必须输出恰好 ${maxImages} 个完整、独立的`));
+        assert.match(instruction, new RegExp(`检查正文中恰好有 ${maxImages} 个完整闭合的绘图块`));
+        assert.doesNotMatch(instruction, /没有合适画面时可不输出|每次回复最多/);
+        assert.match(instruction, /多张图分别紧跟各自对应的段落/);
+        assert.match(instruction, /不要把所有绘图块集中追加在文章最后/);
+        assert.match(instruction, /下面只演示单个块的格式/);
+        assert.ok(instruction.indexOf('本次回复结束前') > instruction.indexOf('穿插关键互动。'));
+        const [example] = parseBlocks(instruction).filter(block => block.scene);
+        assert.deepEqual(example.scene, normalizeScene(makeExampleScene()));
+    }
+});
+
+test('legacy count settings keep their limit and optional mode while fixed mode survives persistence', () => {
+    const legacy = normalizeOptions({ maxImages: 3 });
+    assert.equal(legacy.countMode, 'auto');
+    assert.equal(legacy.maxImages, 3);
+    const instruction = promptInstruction(legacy);
+    assert.match(instruction, /最多 3 个块/);
+    assert.match(instruction, /用户明确指定数量且未超过这个上限时/);
+    assert.match(instruction, /每个绘图块都紧跟它对应的剧情段落/);
+    assert.equal(normalizeOptions(JSON.parse(JSON.stringify({ countMode: 'fixed', maxImages: 2 }))).countMode, 'fixed');
+    assert.throws(() => normalizeOptions({ countMode: 'unknown' }), /图片数量模式/);
+    for (const maxImages of [0, 5, 1.5, '2']) assert.throws(() => normalizeOptions({ countMode: 'fixed', maxImages }));
+});
+
 test('fixed Base inserts the scene verbatim without altering weights or replacement symbols', () => {
     const options = { ...DEFAULTS, basePrompt: 'fur dataset, 1.2::watercolor::, {{scene}}, {{soft edges}}', quality: 'none' };
     const scene = { scene: "2girls. A sign reads $& and $'.", basePrompt: 'overwrite user style', characters: [] };

@@ -1,4 +1,34 @@
-import { createEditorDraft, editorDraftToRequest } from './editor-state.js';
+import { createEditorDraft, editorDraftToRequest, largeSizeForImage } from './editor-state.js';
+
+export function openLargeRedraw({ record, onGenerate }) {
+    const size = largeSizeForImage(record);
+    const dialog = document.createElement('dialog');
+    dialog.className = 'nai-story-editor nai-large-editor';
+    dialog.setAttribute('aria-label', '高清重画 · Large');
+    dialog.innerHTML = `<form class="nai-editor-form">
+      <header><h3>高清重画 · Large</h3><p>使用当前提示词和采样设置重新生成。这次会消耗 Anlas，额度许可仅用于本次重画。</p></header>
+      <label>高清图片比例<select name="size"><option value="landscape">横图 · 1536 × 1024</option><option value="portrait">竖图 · 1024 × 1536</option><option value="square">方图 · 1472 × 1472</option></select></label>
+      <label class="nai-editor-checkbox"><input type="checkbox" name="keepSeed" checked>沿用当前 Seed</label>
+      <small data-role="seed"></small>
+      <small>取消勾选后使用随机 Seed。同一 Seed 在不同分辨率下也可能改变构图。</small>
+      <footer><div class="nai-story-editor-error" role="alert"></div><div class="nai-story-actions"><button type="submit" class="nai-editor-primary">高清重画（消耗 Anlas）</button><button type="button" data-action="cancel">取消</button></div></footer>
+    </form>`;
+    const form = dialog.querySelector('form');
+    form.elements.namedItem('size').value = size;
+    dialog.querySelector('[data-role="seed"]').textContent = `当前 Seed：${record.seed ?? '未知'}`;
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        try {
+            onGenerate({ size: form.elements.namedItem('size').value, keepSeed: form.elements.namedItem('keepSeed').checked });
+            dialog.close();
+        } catch (error) { dialog.querySelector('[role="alert"]').textContent = error.message; }
+    });
+    dialog.querySelector('[data-action="cancel"]').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
+    return dialog;
+}
 
 export function openImageEditor({ scene, options, imageOverrides = {}, onSave, previewOnly = false }) {
     let draft = createEditorDraft(scene, options, imageOverrides);

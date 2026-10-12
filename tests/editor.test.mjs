@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createEditorDraft, editorDraftToRequest } from '../editor-state.js';
+import { createEditorDraft, editorDraftToRequest, createLargeRedraw, largeSizeForImage } from '../editor-state.js';
 import { DEFAULTS, EXAMPLE_SCENE, composePrompts, buildPayload, normalizeImageOverrides, freeGenerationBlockReason } from '../shared.js';
 
 test('visual editing round-trips structured and legacy character prompts including positions', () => {
@@ -88,4 +88,43 @@ test('invalid editor character values are rejected before saving', () => {
     draft.characters[0].prompt = 'girl';
     draft.characters = Array.from({ length: 23 }, () => ({ ...draft.characters[0] }));
     assert.throws(() => editorDraftToRequest(draft, EXAMPLE_SCENE), /22/);
+});
+
+test('Large redraw uses all three dimensions and the current image seed without changing regular settings', () => {
+    const options = { ...DEFAULTS, seed: 99, sizeMode: 'fixed', size: 'portrait', allowAnlas: false };
+    const imageOverrides = { base: '1girl, garden, watercolor', negative: 'text' };
+    const before = structuredClone({ options, imageOverrides });
+    for (const [width, height, size, largeWidth, largeHeight] of [[1216, 832, 'landscape', 1536, 1024], [832, 1216, 'portrait', 1024, 1536], [1024, 1024, 'square', 1472, 1472]]) {
+        const record = { width, height, seed: 0 };
+        assert.equal(largeSizeForImage(record), size);
+        const redraw = createLargeRedraw(record, options, imageOverrides);
+        assert.equal(redraw.options.allowAnlas, true);
+        const payload = buildPayload(EXAMPLE_SCENE, redraw.options, 456, redraw.imageOverrides);
+        assert.equal(payload.parameters.width, largeWidth);
+        assert.equal(payload.parameters.height, largeHeight);
+        assert.equal(payload.parameters.seed, 0);
+        assert.equal(payload.parameters.n_samples, 1);
+        assert.equal(payload.input, imageOverrides.base);
+        assert.equal(payload.parameters.negative_prompt, imageOverrides.negative);
+    }
+    assert.deepEqual({ options, imageOverrides }, before);
+    const regular = buildPayload(EXAMPLE_SCENE, options, 456, imageOverrides);
+    assert.equal(regular.parameters.width, 832);
+    assert.equal(regular.parameters.height, 1216);
+    assert.equal(regular.parameters.seed, 99);
+});
+
+test('unchecking seed retention randomizes even when global seed is fixed and preserves edited prompts', () => {
+    const redraw = createLargeRedraw({ width: 1536, height: 1024, seed: 123 }, { ...DEFAULTS, seed: 99 }, { base: 'custom', negative: '' }, { keepSeed: false, size: 'square' });
+    const payload = buildPayload(EXAMPLE_SCENE, redraw.options, 456, redraw.imageOverrides);
+    assert.equal(payload.parameters.seed, 456);
+    assert.equal(payload.parameters.width, 1472);
+    assert.equal(payload.parameters.height, 1472);
+    assert.equal(payload.input, 'custom');
+    assert.equal(payload.parameters.negative_prompt, '');
+    assert.throws(() => createLargeRedraw({ width: 1024, height: 1024 }, DEFAULTS), /Seed/);
+    assert.equal(createLargeRedraw({ width: 1024, height: 1024 }, DEFAULTS, {}, { keepSeed: false }).options.seed, -1);
+    assert.throws(() => createLargeRedraw({ width: 1024, height: 1024, seed: 1 }, DEFAULTS, {}, { keepSeed: 'false' }), /布尔/);
+    assert.throws(() => normalizeImageOverrides({ resolution: 'huge' }), /分辨率/);
+    assert.throws(() => largeSizeForImage({ width: 0, height: 10 }), /先生成/);
 });

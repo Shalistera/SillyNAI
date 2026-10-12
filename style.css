@@ -20,6 +20,7 @@
 .nai-story-editor-error { color: #ffb5a7; margin: 10px 0; }
 .nai-story-editor summary { cursor: pointer; margin: 12px 0; }
 .nai-visual-editor { width: min(920px, 94vw); padding: 0; overflow-y: auto; color-scheme: dark; }
+.nai-large-editor { width: min(540px, 94vw); padding: 0; color-scheme: dark; }
 .nai-editor-form { display: block; padding: 24px 24px 0; }
 .nai-editor-form header h3 { margin: 0 0 8px; }
 .nai-editor-form p, .nai-editor-form small { line-height: 1.6; color: #b8c5d2; }
@@ -47,4 +48,4 @@
 .nai-prompt-preview h4 { margin: 18px 0 6px; font-size: 14px; color: #b9d4c5; }
 .nai-prompt-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #14181d; border: 1px solid #465249; border-radius: 6px; padding: 12px; font: 13px/1.7 ui-monospace, monospace; color: #eef3ee; }
 .nai-uc-text { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, monospace; padding: 10px; background: #0002; border-radius: 6px; }
-@media (max-width: 480px) { .nai-story-grid { grid-template-columns: 1fr; } .nai-story-editor { padding: 14px; } .nai-visual-editor { padding: 0; } }
+@media (max-width: 480px) { .nai-story-grid { grid-template-columns: 1fr; } .nai-story-editor { padding: 14px; } .nai-visual-editor, .nai-large-editor { padding: 0; } }

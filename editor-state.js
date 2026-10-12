@@ -1,4 +1,22 @@
-import { composePrompts, resolveImageSize, normalizeScene, normalizeImageOverrides, InputError } from './shared.js';
+import { composePrompts, resolveImageSize, normalizeScene, normalizeOptions, normalizeImageOverrides, InputError } from './shared.js';
+
+export function largeSizeForImage(record) {
+    if (!record || !Number.isFinite(record.width) || !Number.isFinite(record.height) || record.width <= 0 || record.height <= 0) {
+        throw new InputError('请先生成一张图片，再进行高清重画。');
+    }
+    return record.width === record.height ? 'square' : record.width > record.height ? 'landscape' : 'portrait';
+}
+
+export function createLargeRedraw(record, options, imageOverrides = {}, { keepSeed = true, size = largeSizeForImage(record) } = {}) {
+    if (typeof keepSeed !== 'boolean') throw new InputError('沿用 Seed 必须是布尔值。');
+    if (keepSeed && (!Number.isInteger(record?.seed) || record.seed < 0 || record.seed > 4294967295)) {
+        throw new InputError('当前图片没有有效 Seed，请取消“沿用当前 Seed”。');
+    }
+    return {
+        options: normalizeOptions({ ...options, seed: keepSeed ? record.seed : -1, allowAnlas: true }),
+        imageOverrides: normalizeImageOverrides({ ...imageOverrides, size, resolution: 'large' }),
+    };
+}
 
 export function createEditorDraft(sceneInput, options, imageOverrides = {}) {
     const scene = normalizeScene(sceneInput);

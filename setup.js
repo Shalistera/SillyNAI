@@ -92,9 +92,9 @@ $('#generate').addEventListener('click', async () => {
 });
 $('#cancel').addEventListener('click', () => controller?.abort());
 request('status').then(data => {
-    if (!(data.promptSchema >= 3) || !(data.generationPolicy >= 4)) {
+    if (!(data.promptSchema >= 3) || !(data.generationPolicy >= 5)) {
         $('#generate').disabled = true;
-        throw new Error('请更新到 0.5.0 或更新版本的服务端插件，并重启酒馆。');
+        throw new Error('请更新到 0.6.0 或更新版本的服务端插件，并重启酒馆。');
     }
     status('#account-status', data.keySaved ? '服务端已就绪，已保存密钥。可直接检查连接。' : '服务端已就绪，请先粘贴并保存 API Key。');
 }).catch(error => status('#account-status', error.message, true));

@@ -1,268 +1,313 @@
-# NovelAI 小说配图
+# SillyNAI — NovelAI Story Illustrator
 
-SillyTavern 的段落插图扩展。小说仍由酒馆当前文字模型生成；NovelAI V5 只负责图片。
+English | [简体中文](README.zh-CN.md)
 
-文字模型在正文中输出 `<nai_image>JSON</nai_image>`，扩展把它显示成插图卡片，转换成 NovelAI V5 请求，并将图片保存在酒馆用户图库。支持自动配图、手动生成、可视化编辑图片、重画、多人独立提示词和位置设置。
+An inline illustration extension for [SillyTavern](https://github.com/SillyTavern/SillyTavern). Your existing text model writes the story and image descriptions; NovelAI V5 generates the illustrations. Images appear next to the passages they illustrate and are saved in the current SillyTavern user's image directory.
 
-当前版本：0.5.0。需要 Node.js 20+、SillyTavern 1.19.0+。实际验证版本为 SillyTavern 1.19.0 `06bde939f`，macOS / Node.js 26.0.0。
+**Version: 0.6.0** · Node.js 20+ · SillyTavern 1.19.0+
 
-0.2.0 将职责分为：用户保存固定 Base（画风），文字模型生成当前场景及每个角色的自然语言描述，扩展负责拼接和发送。默认使用 V5 Full。
+The extension currently has a Chinese interface. This README includes the relevant Chinese control labels.
 
-0.3.0 增加比例选择权和官方 V5 Undesired Content 预设。推荐起点是「模型按场景选择比例」和「官方 Light」，需要统一画幅或已有 UC 时可自行覆盖。
+## Features
 
-0.4.0 将 scene 收紧为少量环境标签，人物的动作、表情和视线单独写入 `actions`，只拼进对应的 Char Prompt。新增「人物动作写法」，默认 Danbooru 动作标签，可切换为简短自然语言。
+- Automatic illustration instructions, or a protocol you can include in your own writing preset.
+- **Fixed image counts**: request exactly 1–4 illustration blocks per reply, or let the model choose within a limit.
+- Illustrations placed immediately after their corresponding story passages.
+- A user-defined Base Prompt for stable style, short scene tags, and separate character prompts with appearance and actions.
+- Danbooru action tags or short natural-language actions; English or Chinese character descriptions.
+- A visual per-image editor for the full Base Prompt, main Undesired Content, character prompts, positions, and orientation.
+- **Large redraw** with an optional, initially checked “keep current seed” setting.
+- Official V5 UC presets, custom UC, and separate negative prompts for each character.
+- Serial image requests, saved chat metadata, and checks against attaching images to the wrong chat or response variant.
 
-0.5.0 将聊天中的图片编辑器改为可视化表单。用户可以直接编辑完整 Base、完整主 UC、每个角色的正负提示词，并为单张图片设置比例。
+NovelAI V5 Full is the default image model. V5 Curated is also available. The extension uses text-to-image generation; image references, Vibe Transfer, inpainting, image-to-image, and upscaling are outside the current feature set.
 
-## 安装
+## Installation
 
-这是前端扩展和服务端插件的组合。安装脚本会复制两部分，启用 `enableServerPlugins`，并在 `backups/` 备份原配置。它不修改酒馆核心源代码，也不复制或覆盖账号密钥、聊天和角色。
+This repository contains a **frontend extension and a server plugin**. Run the installer on the machine that hosts SillyTavern.
 
-1. 在目标电脑安装或更新 SillyTavern。在酒馆根目录运行 `npm ci`，确保它本身能启动。
-2. 关闭酒馆，把安装包解压到任意目录。
-3. 在解压得到的 `novelai-story-illustrator` 目录运行：
-
-   macOS / Linux：
+1. Install or update SillyTavern, run `npm ci` in its root directory, and confirm that it starts normally.
+2. Stop SillyTavern.
+3. Clone this repository using an SSH key with access to it:
 
    ```sh
-   node install.mjs "/完整路径/SillyTavern"
+   git clone git@github.com:Shalistera/SillyNAI.git
+   cd SillyNAI
    ```
 
-   Windows PowerShell：
+4. Install both components:
+
+   macOS / Linux:
+
+   ```sh
+   node install.mjs "/absolute/path/to/SillyTavern"
+   ```
+
+   Windows PowerShell:
 
    ```powershell
    node .\install.mjs "D:\SillyTavern"
    ```
 
-4. 正常启动酒馆，例如在其根目录执行 `npm start`。
-5. 打开酒馆地址下的 `/api/plugins/novelai-story-illustrator/setup`。默认本地地址为：
+5. Start SillyTavern again and refresh your browser.
+6. Open `/api/plugins/novelai-story-illustrator/setup` on your SillyTavern server. With the default local port, this is [http://127.0.0.1:8000/api/plugins/novelai-story-illustrator/setup](http://127.0.0.1:8000/api/plugins/novelai-story-illustrator/setup).
 
-   http://127.0.0.1:8000/api/plugins/novelai-story-illustrator/setup
+A downloaded archive can be extracted instead of cloning. Run the same installer from the extracted directory.
 
-远程部署时，将 `127.0.0.1:8000` 换成你自己的酒馆地址。若酒馆启用了用户账号，请先登录需要使用的账号。插件复用酒馆的身份验证与 CSRF 防护。网络监听、域名和反向代理沿用你的酒馆部署方式。
+The installer copies both components, enables `enableServerPlugins`, and backs up the configuration before changing that setting. Existing chats, characters, credentials, and other configuration values are preserved. No SillyTavern core source changes or additional npm dependencies are required by this extension.
 
-### 通过 Git 部署
+SillyTavern's built-in Git extension installer installs the frontend only. Use the provided script for a complete deployment, including the server component. For a private repository, SSH authentication must work on the **server**, even when you open SillyTavern in a browser on another machine.
 
-项目仓库为 `git@github.com:Shalistera/SillyNAI.git`。在酒馆所在机器上配置有该私有仓库读取权限的 SSH Key，然后执行：
+### Updates
+
+In the cloned source directory:
 
 ```sh
-git clone git@github.com:Shalistera/SillyNAI.git
-cd SillyNAI
-node install.mjs "/完整路径/SillyTavern"
+git pull --ff-only
 ```
 
-以后升级时，在这个源码目录运行 `git pull --ff-only`，关闭酒馆，再运行安装命令并重启。酒馆的「安装扩展」界面只负责前端；本项目还需要服务端插件，因此完整部署使用上面的安装脚本。
+Stop SillyTavern, rerun `node install.mjs "/absolute/path/to/SillyTavern"`, restart the server, and refresh the browser. Version 0.6.0 checks server capability `generationPolicy >= 5` so an older backend cannot silently ignore Large dimensions.
 
-## 连接 NovelAI
+## Connect NovelAI
 
-1. NovelAI → Settings → Account → Get Persistent API Token。已有有效 Token 可直接复用；重新生成会使旧 Token 失效。
-2. 在本扩展的本地设置页粘贴并保存。密钥写入当前酒馆用户的 NovelAI 密钥项，不改变你的文字模型连接。
-3. 点击「检查连接与额度」，确认 Opus 和 V5 额度。
-4. 用「生成一张测试图片」检查网络和出图。测试不会调用文字模型。
+1. In NovelAI, open **Settings → Account → Get Persistent API Token**. An existing valid token can be reused; replacing it invalidates the previous token.
+2. Paste it into the extension's setup page and save it.
+3. Click **检查连接与额度** (Check connection and quota).
+4. Optionally use **生成一张测试图片** (Generate a test image). This does not call your text model.
 
-密钥由酒馆服务端保存，请按敏感文件管理酒馆的 `data/` 目录。本安装包不包含本机账号密钥；迁移到其他电脑后需自己配置。不要把密钥写进预设、世界书或聊天。
+The server stores the token in the current SillyTavern user's NovelAI secret entry. It uses SillyTavern's authentication and CSRF protection. Keep credentials in the setup page and protect your server's `data/` directory; presets, world books, and story messages should contain only story and image instructions.
 
-## 小说中使用
+For remote deployments, replace the local host and port with your own SillyTavern address. If accounts are enabled, sign into the account that will use the extension. Image API requests originate from the SillyTavern server.
 
-打开「扩展 → NovelAI 小说配图」。
+## Story generation and image counts
 
-- **自动向文字模型加入绘图要求**：默认开启。扩展向当前文字模型注入指令，由同一次回复同时产出小说和画面描述，不额外调用文字模型。
-- **回复完成后自动出图**：默认关闭。完成账号测试后勾选即可自动配图。关闭时，小说中的绘图块仍显示为可手动生成的卡片。
-- **每条回复图片上限**：默认 1，可设为 1–4；自动注入指令和自动队列遵循这个值。超出自动上限的已有块仍可手动出图。
-- **图片比例由谁决定**：默认让模型按场景选择，只允许三种常规尺寸；也可以固定你选择的比例。固定模式下，模型不能改变尺寸。模型遗漏 `size` 时使用你设置的备用比例。
-- **固定 Base Prompt（画风）**：只填写你长期使用的画风、画师、媒介、质量偏好等。模型不接触或改写这段设置；扩展在发送前插入当前场景。使用 `{{scene}}` 指定插入位置；省略占位符时在固定内容后追加场景。已有自己的质量词时可把「质量标签」设为「不添加」。
-- **人物动作写法**：默认 Danbooru 动作标签；也可选简短自然语言。用于后续文字模型生成的 `actions`，切换不会自动翻译已有绘图块。自动注入和「复制预设指令」都会使用当前选择。
-- **人物描述语言**：默认英文，也可选择中文；用于外貌描述和自然语言模式的动作。环境标签和 Danbooru 动作标签始终使用英文。
-- **给文字模型的附加绘图要求**：可填写镜头偏好、服装跟随正文、动作描写等规则。自动注入时一并发送；复制预设指令时也包含这部分。
-- **主 Undesired Content**：默认官方 V5 Light，可选其他官方预设，追加自定义内容，或完全自定义。角色的 negative 独立发送，不混入主 UC。默认质量标签会在正向 Base 添加 `no text`；需要画面内文字时把质量标签设为「不添加」，并检查自己的 UC。
-- **人物外貌备忘**：提供给文字模型的稳定外貌资料。当前为全局设置，切换作品时需要修改；服装、表情和动作仍由当前情节决定。它不能保证每张图的人脸完全相同。
+Open **Extensions → NovelAI 小说配图**.
 
-如果你想自己维护预设，关闭「自动向文字模型加入绘图要求」，把 `预设指令.txt` 的内容加入预设。也可点击扩展里的「复制预设指令」，复制符合当前图片数量和外貌备忘的版本。
+- **自动向文字模型加入绘图要求** (Automatically inject image instructions): enabled by default. The extension adds a system instruction in the chat context, at depth 0, so the same text-model reply contains prose and image descriptions.
+- **回复完成后自动出图** (Generate images when the reply finishes): disabled by default. With this off, image blocks appear as cards with a manual Generate button. Enabling it queues images from newly completed replies.
+- **图片数量模式** (Image count mode): choose an upper limit or a fixed count. The count ranges from 1 to 4.
 
-两种方式使用相同的 `<nai_image>` 格式。不要同时在多个位置重复添加同一套要求。插件只处理助手正文，不处理用户消息、系统消息或思考过程。
+### Exactly two illustrations, placed with the story
 
-## 在聊天中编辑图片
+Choose **每条回复固定数量** (Fixed count per reply), then set **每条回复固定几张** to **2**. The injected instruction requests exactly two complete, independent `<nai_image>` blocks.
 
-点击插图卡片下的「编辑图片」，通过表单修改：
+The placement follows the story:
 
-- **Base Prompt · 完整正向提示词**：包含实际发送的画风、场景、人数和质量词。保存后按框内完整内容发送，保留权重、标点和换行；需要修改场景时，直接修改这里的环境标签。
-- **主 Undesired Content · 完整负面提示词**：可以直接删改官方 UC 中的任何内容，留空表示空主 UC。该图按自定义 UC 处理。
-- **角色提示词**：各角色拥有独立的完整正向提示词和负面提示词，可修改性别标签、外貌、衣着、动作；支持添加、删除、排序。增删角色后可同步调整 Base 中的人数标签。
-- **人物位置**：勾选手动设置后，逐人填写 0–1 的水平和垂直坐标；关闭时由 NovelAI 自动构图。
-- **本图比例**：三种尺寸任选，其优先级高于全局固定比例和模型选择。
+1. A passage describes the first moment.
+2. Its illustration block immediately follows that passage.
+3. The story continues to another moment.
+4. A second illustration block immediately follows that passage.
 
-「保存」保留修改，之后点击「重画」应用；「保存并出图」保存后立即生成；「取消」放弃本次编辑。保存只影响当前消息、当前候选中的这张图，刷新后仍保留。全局固定 Base、UC 与其他图片继续使用各自的设置。
+Each block describes its own moment. The instruction explicitly discourages collecting all images at the end, consecutive image blocks, duplicate scenes, JSON arrays, and multi-panel compositions used as substitutes for separate images.
 
-首次打开时，表单使用当前全局设置与该图场景拼接内容；保存后，这张图使用独立的完整提示词，全局画风、质量词和 UC 不会再次追加。可以点击「从全局设置重新填入主提示词与 UC」，将当前全局设置与原场景重新拼接到表单，再自行修改并保存。
+**按剧情决定，设定上限** (Let the model decide within a limit) retains the previous behavior: zero to N blocks. A requested count in your message is honored by the instruction when it fits within that limit. Set the limit to at least 2 before asking for two images in a particular reply; the default limit is 1.
 
-表单编辑值存入聊天消息的附加数据；文字模型仍输出原有的 `<nai_image>` 协议。无需为这次升级修改文字预设。
+Fixed mode also checks the number of valid blocks after the reply completes and reports a mismatch. The text model may still omit a block, run out of output tokens, or produce invalid JSON. The extension preserves the response and does not send additional text-model requests to fill missing blocks.
 
-## 图片比例：模型选择或用户固定
+In both modes, automatic generation processes at most N valid blocks in sequence. Extra blocks remain available for manual generation. Existing settings retain their previous limit and the optional-count mode after an upgrade.
 
-| 选项 | 实际尺寸 | 通常适合的构图 |
-| --- | --- | --- |
-| portrait / 竖图 | 832×1216 | 人物纵向构图、全身、竖向空间 |
-| landscape / 横图 | 1216×832 | 横向互动、并列人物、宽阔环境 |
-| square / 方图 | 1024×1024 | 居中近景、对称构图、紧凑画面 |
+### Using your own writing preset
 
-自动模式会把这三种选项和构图指引加入文字模型的指令，模型按当前画面选择。省略 `size` 时使用「模型遗漏时的备用比例」，默认竖图。扩展不凭人物数量替模型猜一个比例。
+Click **复制预设指令** (Copy preset instructions) to copy instructions reflecting the current count, placement rules, character notes, action style, and other writing settings. Add them to your preset and turn off automatic injection if the preset already supplies the protocol.
 
-固定模式向文字模型说明你选定的画幅，并在服务端使用它。例如你固定方图，即使模型 JSON 写着 `"size":"landscape"`，实际请求也仍是 1024×1024。用户在「编辑图片」表单保存的本图比例优先于全局设置，方便单独调整一张图片。
+After changing these settings, copy and replace the old preset instructions. The bundled [预设指令.txt](预设指令.txt) is a default example with an upper limit of one; it is not a live copy of your configuration.
 
-扩展始终只使用这三种尺寸，不接受模型任意填写宽高。它们均在 Opus 常规免费像素范围内；免 Anlas 仍需单张、最多 28 步、有效 Opus 和可用 V5 额度。[官方订阅规则](https://docs.novelai.net/en/subscription/)
+## Prompt composition
 
-编辑器显示下一次出图使用的比例，图片生成后卡片显示实际宽高。
+### Base Prompt and scene tags
 
-## 主 Undesired Content：官方预设与自定义
-
-按 2026-09-22 的 [NovelAI 官方 V5 UC 文档](https://docs.novelai.net/en/image/undesiredcontent/) 内置四个预设。V5 Full 与 Curated 在该文档中的预设内容相同；没有混用 V4.5 的同名预设。
-
-- **Light**：本扩展的日常默认，适合作为起点，随后按画面需要添加自己的排除词。
-- **Heavy**：包含更多表现方式的排除词，如颗粒、网点和多视图。需要这些画风时应调整。
-- **Human Focus**：包含眼睛和解剖相关排除词，其中也包含 `glowing eyes`；魔法发光眼等场景不适合直接照用。
-- **Furry Focus**：官方兽人导向预设，其中有 `widescreen`、`sketch`、`comic` 等词，应结合目标画风选择。
-- **完全自定义**：不添加任何官方预设，只用你的文本。留空则不添加固定主 UC。
-
-选择官方预设时，输入框是「自定义追加 UC」，按原样追加到预设后。要修改官方原文，可以点击「以当前内容创建自定义 UC」，将当前官方文本和追加内容复制到可编辑框，随后删改。程序不会按逗号重排或拆碎你的权重语法。
-
-主 UC 按“所选官方预设＋用户自定义文本＋可选的本图补充”组合。选择完全自定义时，第一部分为空。
-
-新安装默认关闭「允许模型追加本图主 UC」，让主 UC 由你掌控。每个角色自己的 `negative` 仍独立生效，便于避免多人特征串到另一人。
-
-旧版本自定义文本会迁移到「完全自定义」，保留旧的模型 UC 追加行为；只有未经修改的旧默认短词串会升级成官方 Light。可以按需要关闭模型追加选项。迁移不会丢掉你原先自写的 UC。
-
-## 短环境标签与人物动作怎样组合
-
-例如你在扩展里保存：
+Use **固定 Base Prompt（画风）** for style, artist, medium, or other stable preferences. Insert `{{scene}}` where the current scene should go:
 
 ```text
 watercolor illustration, delicate ink linework, soft muted colors,
 {{scene}}, textured watercolor paper
 ```
 
-模型只输出场景：
+The text model provides a compact scene, such as:
 
 ```text
 1girl, 1boy, indoors, tavern, table, night, candlelight
 ```
 
-扩展将这段内容插到 `{{scene}}` 处，其余固定文本保持不变，再按设置追加可选质量标签。其他双花括号权重语法原样保留，不被当作场景占位符。
+The extension inserts those tags into the Base Prompt. Without a placeholder, it appends the scene. Other double-brace weighting syntax is preserved. Optional quality tags are added separately; choose **不添加** (None) if you already provide your own.
 
-scene 在人数之外通常只写 3–6 个环境标签，包含室内/室外、房间或地点类型、必要的时间和光线；关键背景物最多保留一项。不在这里罗列建筑细节、人物外貌或动作。这是文字模型的生成要求，程序不会粗暴截断旧聊天或用户手写内容。
+The generated `scene` should contain the subject count and roughly 3–6 environment, time, and lighting tags. Character appearance, clothing, actions, expressions, and gaze belong in the corresponding character entry. These are instructions for the text model; existing or manually edited prompts are not truncated to a tag count.
 
-模型分别填写每个人的 `gender`、`description` 和 `actions`，例如：
+Your fixed Base text is composed on the image side and is not included in the text-model instructions.
 
-```json
-{
-  "name": "女子",
-  "gender": "girl",
-  "description": "An adult woman with long black hair and blue eyes, wearing a red cloak over a white blouse.",
-  "actions": "sitting, holding cup, smile, looking at another"
-}
-```
+### Character prompts
 
-实际发送给 NAI 的 Char Prompt 为：
+Each visible character has separate `gender`, `description`, and `actions` fields. The extension combines them into that character's prompt:
 
 ```text
-girl, An adult woman with long black hair and blue eyes, wearing a red cloak over a white blouse., sitting, holding cup, smile, looking at another
+girl, An adult woman with long black hair and blue eyes, wearing a red cloak., sitting, holding cup, smile, looking at another
 ```
 
-每个角色独立传入自己的 Char Prompt：description 简短写已知年龄、外貌和当前衣着；actions 明确写这个人的姿势、手部动作或持物、表情和视线。动作不能只留在 scene，人物描写也不能只有外貌。固定画风不重复塞进各人物。`girl / boy` 是 NAI 分类标签，年龄另按已知设定描述。
+- `description` contains known appearance and current clothing.
+- `actions` contains that person's posture, gestures, held objects, expression, and gaze.
+- `gender` is `girl`, `boy`, or `other`. These are category tags; known age is described separately.
+- `negative` is sent only for the corresponding character.
 
-Danbooru 模式用逗号分隔的常用英文标签，多词标签采用空格形式，如 `leaning forward, holding cup, looking at another`。要求模型选择约 3–8 个符合正文的必要标签，不机械凑数，不臆造动作。复杂互动若需说明对象或方向，可在该人物 actions 内补一句很短的自然语言。切换为自然语言模式时，actions 改用所选语言的 1–2 个短句，scene 仍保持环境标签。
+**人物动作写法** selects Danbooru-style action tags by default, or short natural-language actions. Tags use spaces between words, for example `leaning forward, holding cup`. The writing instruction requests only the relevant actions, usually 3–8 tags. A short natural-language clarification can describe an interaction when necessary.
 
-多人互动可使用 NovelAI 的动作前缀，例如主动拥抱者的 `source#hug`、被拥抱者的 `target#hug` 或双方的 `mutual#hug`。这属于 NovelAI 提供的补充语法；官方也说明其效果不总是可靠，不能保证每次都精确控制动作。[官方多角色与动作说明](https://docs.novelai.net/en/image/multiplecharacters/)、[官方标签说明](https://docs.novelai.net/en/image/tags/)
+**人物描述语言** selects English or Chinese for appearance and natural-language actions. Environment tags and Danbooru action tags remain in English.
 
-你可以点击「预览 Base / Char」，在不调用 API 的情况下检查拼接结果。每张插图的「编辑图片」表单显示可修改的完整 Base、UC 和各个 Char，使用这些内容进行下一次出图；旧图生成时的内容可从 PNG 元数据查看。
+**人物外貌备忘** adds optional appearance notes for the text model. **给文字模型的附加绘图要求** adds your own composition or writing preferences. These settings are global; review them when switching stories.
 
-固定画风文本本身不进入小说文字模型上下文，模型也不需要每轮重写它。角色具体描述由文字模型结合角色卡、世界书和正文填写；「人物外貌备忘」是可选补充，不要求你手工写每个 Char。
+### Undesired Content
 
-## 指令格式
+The built-in V5 presets are Light (default), Heavy, Human Focus, and Furry Focus, based on the [official UC documentation](https://docs.novelai.net/en/image/undesiredcontent/) checked on 2026-09-22. Their contents should be reviewed against your intended style; for example, a preset may exclude effects that you want to keep.
+
+With an official preset selected, custom UC text is appended. **以当前内容创建自定义 UC** copies the combined text into a fully editable custom preset. Custom mode can also use an empty main UC.
+
+**允许模型追加本图主 UC** controls whether the text model may append a scene-level negative prompt; it is off for new installations. Character negatives remain independent. Existing custom UC from older versions is preserved during migration.
+
+## Visual per-image editing
+
+Click **编辑图片** on an illustration card. The editor provides:
+
+- The complete positive **Base Prompt**, including style, scene, subject count, and quality tags.
+- The complete main **Undesired Content**, including the ability to remove every negative tag.
+- Complete positive and negative prompts for each character, with add, remove, and reorder controls.
+- Optional manual X/Y positions in the range 0–1; otherwise NovelAI determines placement.
+- A title and one of the three standard image sizes.
+
+**保存** saves edits. **保存并出图** saves and generates immediately. **取消** discards the current edit session.
+
+On first opening, the editor composes the scene using your current global settings. Once saved, that image uses its own complete Base and UC exactly as entered, with no further global style, quality, or UC additions. The reset button can refill the main prompts from current global settings and the original scene.
+
+Edits are saved in the current message and response variant's metadata and survive a reload. Other images and global settings keep their own values. When adding or removing characters, update the subject-count tags in Base as appropriate.
+
+The editor shows the prompts for the next generation. Original generation parameters remain available in the saved PNG metadata.
+
+## Standard sizes and Large redraw
+
+| Orientation | Standard generation | Large redraw |
+| --- | --- | --- |
+| Landscape | 1216 × 832 | 1536 × 1024 |
+| Portrait | 832 × 1216 | 1024 × 1536 |
+| Square | 1024 × 1024 | 1472 × 1472 |
+
+Standard generation can follow the text model's `size`, use a fallback when omitted, or use your global fixed orientation. A size saved in the image editor overrides the global setting for that image.
+
+After an image exists, click **高清重画** (Large redraw):
+
+1. The dialog selects the orientation of the current image; you can choose any of the three Large sizes.
+2. **沿用当前 Seed** (Keep current seed) is **checked by default** and uses the seed of the image currently on the card.
+3. Uncheck it to use a random seed, even if your global seed is fixed.
+4. Click **高清重画（消耗 Anlas）** to queue this paid generation.
+
+Large redraw uses the current edited prompts and sampling settings. Its Anlas permission, dimensions, and seed choice apply to that request only. Global cost permission and seed settings are preserved. **常规重画** continues to use standard sizes and the usual settings, even after a Large image is displayed.
+
+This regenerates an image from text at a larger resolution. Reusing a seed at a different resolution can change the composition. A successful result replaces the card's image; earlier files remain in the user's image directory.
+
+## Image block protocol
+
+The model writes these blocks directly between story passages:
 
 ```text
-她坐在窗边，捧着杯子，带着浅笑望向窗外。
+She settles beside the window, holding a cup and watching the rain.
 
 <nai_image>
 {
-  "title": "窗边的旅人",
+  "title": "The traveler by the window",
   "scene": "1girl, indoors, bedroom, window, night, backlighting",
   "size": "portrait",
   "characters": [
     {
-      "name": "旅人",
+      "name": "Traveler",
       "gender": "girl",
       "description": "An adult woman with long black hair and blue eyes, wearing a loose white shirt.",
       "actions": "sitting, holding cup, looking away, smile",
       "negative": "",
       "position": { "x": 0.5, "y": 0.5 }
     }
-  ],
-  "negative": ""
+  ]
 }
 </nai_image>
 
-她静静望着远处。
+The conversation continues.
 ```
 
-- `scene` 必填，使用人数和少量环境、时间、光线标签，不放人物动作。也接受 `prompt` 作为这个字段的别名。
-- `characters` 可省略；最多 22 人。每个人的 `gender` 与 `description` 必填。`gender` 只能是 `girl`、`boy` 或 `other`；`description` 简短描述外貌和当前衣着。名称只用于帮助理解，实际外貌需要写进描述。
-- `characters[].actions` 是此人的动作、姿势、表情和视线，按所选模式写标签或短句。扩展原样追加到对应的 Char Prompt，保留逗号、权重及互动前缀。新注入指令要求模型填写；旧聊天可省略，仍按原人物描述生成。
-- 0.1.0 的 `characters[].prompt` 完整提示词仍兼容，会原样传入，不从旧描述猜测性别。旧「统一画风」设置自动迁移到固定 Base；旧聊天无须重写。
-- `position` 可以全部省略让模型构图；指定时，每个人都要有 `x`、`y`，范围是 0–1，左上角为 0,0。V5 的连续坐标会原样传递，不压成旧版网格。
-- `size` 只能为 `portrait`、`landscape`、`square`；自动模式采用它，缺省用备用比例；固定模式使用用户设置，覆盖模型选择。
-- `title` 和两层 `negative` 均可省略。顶层 `negative` 只有开启「允许模型追加本图主 UC」时才生效；角色级 `negative` 独立生效。
-- JSON 内不要写固定 Base、API 地址、密钥、步数、模型或费用开关。它们由扩展设置控制。
+- `scene` is required. `prompt` is accepted as an alias.
+- `characters` is optional, with at most 22 entries. Structured entries use `gender` and `description`; the generated instructions also request `actions`.
+- Existing complete `characters[].prompt` strings remain supported. Older descriptions without `actions` also continue to work.
+- `position` may be omitted for every character. When using manual positions, provide both coordinates for every character. The top-left corner is `(0, 0)`.
+- `size` is `portrait`, `landscape`, or `square`. It selects orientation for standard generation, subject to user overrides.
+- `title`, character negatives, and the optional scene-level `negative` may be omitted.
+- Model output cannot select Large resolution, change billing permission, set arbitrary dimensions, or replace the user's model, seed, or sampling settings.
 
-绘图块仍保存在聊天原文中，方便重新加载和导出；扩展只改变它在正文中的显示。因此编辑原消息、搜索或酒馆「最近聊天」摘要时仍可能看到指令文本。它也会作为历史上下文的一部分发送给文字模型。
+The original blocks remain in chat text for reloads and export; the extension changes their displayed representation. They may therefore appear in message editing, searches, recent-chat excerpts, and history sent to the text model. The visual editor stores its overrides separately in message metadata.
 
-## 费用和队列行为
+## Costs and queue behavior
 
-默认使用 V5 Full、单张、23 步、引导 7、随机种子。所有内置尺寸均不超过 1,048,576 像素。
+Defaults are V5 Full, one image per request, 23 steps, guidance 7, and a random seed. Standard sizes are at most 1,048,576 pixels.
 
-「允许消耗 Anlas」默认关闭。每次出图前，服务端检查有效 Opus、V5 额度以及免费参数范围；不能确认时停止，提示你检查额度或主动允许 Anlas。额度检查与官方实际扣费不是同一个原子操作，临界额度、其他客户端同时生成等情况下，不能保证完全不扣费。实际扣费以 NovelAI 为准。
+**允许消耗 Anlas** (Allow Anlas spending) is off by default. For standard requests without this permission, the server checks active Opus, available V5 quota, and the free parameter range before generation. Large requests exceed that range and require the explicit paid redraw action or an authorized API request. See the [official subscription rules](https://docs.novelai.net/en/subscription/) for billing terms.
 
-出图逐张排队。同一酒馆用户的并发请求会被拒绝；不会自动重试失败请求。刷新页面、打开历史聊天或切换候选回复不会自动补图。失败或中途关闭留下的任务需手动重试，避免重复使用额度。
+Quota checks and generation are separate operations, so NovelAI determines the actual charge if quota or account state changes between them.
 
-换聊天、编辑/删除消息、切换候选回复或取消队列，会取消相关待处理任务。回填前会检查原聊天、消息对象、文本和当前候选，避免图片串到其他回复。请求已经到达 NovelAI 时，取消等待不保证返还额度；已保存的图片可在用户图库查看。
+Images are queued one at a time. Concurrent requests for the same SillyTavern user are rejected; failed requests are not retried automatically. Reloading a page, opening history, or switching response variants does not automatically generate missing illustrations.
 
-「编辑图片」修改的是该插图的独立覆盖值，保存在消息附加数据内。点击「保存」后需要重画才会应用到图片。重画沿用设置中的种子；随机种子为 -1。
+Changing chats, editing or deleting messages, switching variants, or cancelling the queue cancels affected work. Before attaching a result, the extension checks the originating chat, message, text, and variant. A request already received by NovelAI may still finish and use quota; a completed file can remain in the user's image directory even when it is no longer attached to the chat.
 
-## 手动安装和 Docker
+## Manual installation and Docker
 
-安装脚本的目标是**酒馆根目录**，不是浏览器运行的电脑。Docker 部署可把两套文件放入对应的持久化挂载目录，或在包含酒馆源码与依赖的容器内运行安装脚本。
+Install into the SillyTavern server directory or the equivalent persistent container mounts.
 
-前端目录 `public/scripts/extensions/third-party/novelai-story-illustrator/`：
+Frontend directory: `public/scripts/extensions/third-party/novelai-story-illustrator/`
 
 ```text
-package.json manifest.json index.js editor.js editor-state.js shared.js uc-presets.js queue.js settings.html style.css setup.js
+package.json manifest.json index.js editor.js editor-state.js shared.js
+uc-presets.js queue.js settings.html style.css setup.js
 ```
 
-服务端目录 `plugins/novelai-story-illustrator/`：
+Server directory: `plugins/novelai-story-illustrator/`
 
 ```text
 package.json server.mjs service.mjs shared.js uc-presets.js setup.html
 ```
 
-在酒馆 `config.yaml` 中设置 `enableServerPlugins: true`，然后重启酒馆并刷新浏览器。服务端运行于酒馆的 Node.js 进程，不需要额外服务器、额外端口或独立依赖安装。它复用酒馆的 `node-fetch`、密钥库、图片路径与 ZIP 解包功能。
+Set `enableServerPlugins: true` in `config.yaml`, restart SillyTavern, and refresh the browser. The plugin runs inside SillyTavern's Node.js process using its existing fetch, secret storage, image path, and ZIP extraction support.
 
-## 升级、移除和故障排查
+To remove it, stop SillyTavern, remove these two component directories, and restart. Saved chats and images remain. Leave server plugins enabled if other installed plugins need them.
 
-- 升级：关闭酒馆，运行新版 `install.mjs`，重启并刷新页面。安装脚本只覆盖本扩展的程序文件。
-- 升级到 0.5.0 时，前后端两部分都要更新并重启，随后刷新页面。前端检查服务端 `generationPolicy >= 4`，确保完整主提示词覆盖值生效。现有设置、绘图块与旧图兼容；单张图的修改在重画后应用。
-- 移除：关闭酒馆，移走上述前端与服务端目录，重启。其他服务端插件仍在使用时，保持 `enableServerPlugins: true`。已有图片和聊天数据保留。
-- 设置页 404：检查服务端目录、配置开关，并确认已重启服务端。
-- 扩展未出现：确认酒馆版本不低于 1.19.0，扩展未被禁用，然后刷新页面。
-- 401：重新检查 Persistent API Token；重新生成 Token 后需要在酒馆更新。
-- 402：免费额度或参数检查不通过。查看提示，确认是否要允许消耗 Anlas。
-- 429：等待后手动重试，避免多个客户端同时请求。
-- 400：检查人物数量、坐标及提示词长度；模型输出的绘图块还需要符合 JSON 格式。可通过「编辑图片」表单重新填写画面内容。
-- 网络失败：检查**酒馆所在机器**能否访问 `https://image.novelai.net`。需要代理时配置酒馆自己的 `requestProxy`。
-- 按钮出现但模型不输出指令：确认自动注入已开启、没有被其他预设覆盖，或把 `预设指令.txt` 明确加入你的预设。不是所有文字模型都同样擅长遵循 JSON 输出格式。
+## Troubleshooting
 
-## 测试与已知范围
+| Symptom | Check |
+| --- | --- |
+| Setup page returns 404 | Install the server component, enable server plugins, and restart. |
+| New controls are missing | Reinstall the frontend files and refresh the browser. |
+| Backend upgrade message | Update both components to 0.6.0 and restart the server. |
+| The model writes only one image | Select fixed count 2, or raise the optional limit; replace stale rules in your own preset. |
+| Images appear only at the end | Ensure the updated placement instructions reach the text model and remove conflicting preset rules. |
+| Image count mismatch | Check output length, block closure, valid JSON, and conflicting count instructions. |
+| 401 | Update the saved Persistent API Token. |
+| 402 | Check NovelAI quota or Anlas balance and the request's cost permission. |
+| 429 | Wait and retry manually; avoid concurrent clients. |
+| 400 | Check prompt length, character count, coordinates, and block format. |
+| Network failure | Check that the server can reach `https://image.novelai.net`; configure SillyTavern's `requestProxy` if needed. |
 
-在本目录执行 `npm test`。测试不使用真实密钥，也不会访问 NovelAI。
+## Development and validation
 
-已完成的验证和版本依据见 `验证记录.md`。第一版仅提供文生图；图片参考、Vibe Transfer、图生图、修复、放大、永久人物图库和额外文字模型翻译均未加入。
+```sh
+npm test
+```
 
-本项目使用 AGPL-3.0-only 许可，见 `LICENSE`。
+The test suite uses mocked network responses and does not require a real NovelAI token. It covers block parsing, prompt composition, settings migration, fixed counts and inline-placement instructions, per-image edits, all Large sizes, seed selection, cost guards, request deduplication, and queue cancellation.
+
+The separately runnable installer smoke test requires a local SillyTavern installation:
+
+```sh
+node tests/install-smoke.mjs /path/to/SillyTavern
+```
+
+It installs into a temporary directory and checks repeated installation, configuration backups, component files, and user-data preservation.
+
+The tested host is macOS with Node.js 26.0.0 and SillyTavern 1.19.0, release commit `06bde939f`. Earlier releases were tested with real V5 Full images at standard sizes. The latest real API attempt reported an invalid token; Large output has not yet been validated with a live account. Fixed-count and placement instructions are tested as generated text, not as a guarantee of a particular writing model's adherence. Windows, Linux, and Docker installation have not been run on those platforms.
+
+Detailed historical results are in [验证记录.md](验证记录.md) (Chinese).
+
+## License
+
+[AGPL-3.0-only](LICENSE).

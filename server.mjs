@@ -43,7 +43,7 @@ export async function init(router) {
         }
     };
     router.get('/status', wrap(async (req, res) => {
-        res.json({ version: VERSION, promptSchema: 3, generationPolicy: 4, keySaved: Boolean(readSecret(req.user.directories, SECRET_KEYS.NOVEL)) });
+        res.json({ version: VERSION, promptSchema: 3, generationPolicy: 5, keySaved: Boolean(readSecret(req.user.directories, SECRET_KEYS.NOVEL)) });
     }));
     router.post('/key', wrap(async (req, res) => {
         const key = req.body?.key;

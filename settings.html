@@ -14,8 +14,13 @@
       <label class="checkbox_label"><input type="checkbox" data-option="automatic">回复完成后自动出图</label>
       <small>关闭时仍会显示插图位置，点击“生成”即可出图。历史消息不会自动补图。</small>
       <div class="nai-story-grid">
+        <label>图片数量模式<select class="text_pole" data-option="countMode"><option value="auto">按剧情决定，设定上限</option><option value="fixed">每条回复固定数量</option></select></label>
+        <label><span id="nai-count-label">每条回复最多几张</span><input class="text_pole" type="number" min="1" max="4" step="1" data-option="maxImages"></label>
+      </div>
+      <small id="nai-count-hint"></small>
+      <small>多张图分别紧跟各自对应的剧情段落。数量要求通过“自动向文字模型加入绘图要求”发送；使用自备预设时，修改配置后重新“复制预设指令”并替换预设中的旧要求。</small>
+      <div class="nai-story-grid">
         <label>模型<select class="text_pole" data-option="model"><option value="nai-diffusion-5-full">V5 Full</option><option value="nai-diffusion-5-curated">V5 Curated</option></select></label>
-        <label>每条回复最多几张<input class="text_pole" type="number" min="1" max="4" step="1" data-option="maxImages"></label>
         <label>图片比例由谁决定<select class="text_pole" data-option="sizeMode"><option value="auto">模型按场景选择（推荐）</option><option value="fixed">我来固定比例</option></select></label>
         <label><span id="nai-size-label">模型遗漏时的备用比例</span><select class="text_pole" data-option="size"><option value="portrait">竖图 832 × 1216</option><option value="landscape">横图 1216 × 832</option><option value="square">方图 1024 × 1024</option></select></label>
         <label>步数<input class="text_pole" type="number" min="1" max="50" step="1" data-option="steps"></label>
@@ -23,14 +28,14 @@
         <label>种子（-1 为随机）<input class="text_pole" type="number" min="-1" max="4294967295" step="1" data-option="seed"></label>
         <label>质量标签<select class="text_pole" data-option="quality"><option value="light">轻量</option><option value="standard">标准</option><option value="none">不添加</option></select></label>
       </div>
-      <small>仅使用以上三种常规尺寸。固定模式下，你的选择优先于模型。Opus 免 Anlas 还需满足单张、最多 28 步且 V5 额度可用。</small>
+      <small>自动出图使用以上三种常规尺寸，已有图片可另选“高清重画”使用 Large 尺寸。固定模式下，你的选择优先于模型。Opus 免 Anlas 还需满足单张、最多 28 步且 V5 额度可用。</small>
       <label class="checkbox_label"><input type="checkbox" data-option="allowAnlas">允许消耗 Anlas</label>
       <small>关闭时会检查 Opus、V5 额度和参数，不满足条件就停止。临界额度下的实际计费仍由 NovelAI 决定。</small>
       <label>固定 Base Prompt（画风）<textarea class="text_pole" rows="5" data-option="basePrompt" placeholder="填写你长期使用的画风词。可用 {{scene}} 指定场景插入位置。"></textarea></label>
       <small>填写的文本由程序保留并拼接。{{scene}} 会替换为模型生成的场景；没有占位符时追加到末尾。质量标签按上方选项另行添加，已有质量词可选“不添加”。</small>
       <button type="button" class="menu_button" id="nai-story-preview">预览 Base / Char</button>
       <label>人物动作写法<select class="text_pole" data-option="actionMode"><option value="tags">Danbooru 动作标签（推荐）</option><option value="natural">简短自然语言</option></select></label>
-      <small>动作、姿势、表情和视线写入每个人自己的 actions；例如 sitting, holding cup, smile。scene 只保留人数和约 3–6 个环境、光线标签。切换后用于新生成的描述，旧图可在“编辑画面”中修改。</small>
+      <small>动作、姿势、表情和视线写入每个人自己的 actions；例如 sitting, holding cup, smile。scene 只保留人数和约 3–6 个环境、光线标签。切换后用于新生成的描述，旧图可在“编辑图片”中修改。</small>
       <label>人物描述语言<select class="text_pole" data-option="descriptionLanguage"><option value="en">英文自然语言</option><option value="zh">中文自然语言</option></select></label>
       <small>用于人物外貌和自然语言动作；Danbooru 动作标签和环境标签始终用英文。扩展将 gender、description、actions 拼进对应的 Char Prompt。</small>
       <label>给文字模型的附加绘图要求<textarea class="text_pole" rows="4" data-option="promptGuidance" placeholder="例如：衣着遵循正文最新状态；优先描写能看清人物表情的关键互动；使用自然句描述动作。"></textarea></label>
