@@ -6,7 +6,7 @@ SillyTavern 的段落插图扩展。小说仍由酒馆当前文字模型生成�
 
 文字模型在正文中输出 `<nai_image>JSON</nai_image>`，扩展把它显示成插图卡片，转换成 NovelAI V5 请求，并将图片保存在酒馆用户图库。支持自动配图、手动生成、可视化编辑图片、重画、多人独立提示词和位置设置。
 
-当前版本：0.6.0。需要 Node.js 20+、SillyTavern 1.19.0+。实际验证版本为 SillyTavern 1.19.0 `06bde939f`，macOS / Node.js 26.0.0。
+当前版本：0.6.1。需要 Node.js 20+、SillyTavern 1.19.0+。实际验证版本为 SillyTavern 1.19.0 `06bde939f`，macOS / Node.js 26.0.0。
 
 0.2.0 将职责分为：用户保存固定 Base（画风），文字模型生成当前场景及每个角色的自然语言描述，扩展负责拼接和发送。默认使用 V5 Full。
 
@@ -18,44 +18,68 @@ SillyTavern 的段落插图扩展。小说仍由酒馆当前文字模型生成�
 
 0.6.0 新增「每条回复固定数量」，可要求恰好 1–4 个绘图块，保留原来的按剧情决定数量模式。多张插图分别跟随对应剧情段落，回复结束时提示有效绘图块的数量差异。同时新增 Large 高清重画，沿用当前 Seed 默认勾选，可改为随机 Seed。
 
+0.6.1 修复 Git 安装后设置页一直停在“正在检查本地服务…”的问题；按功能检测服务端能力，旧服务端继续处理常规出图，并支持停用重复的旧离线前端。
+
 ## 安装
 
-这是前端扩展和服务端插件的组合。安装脚本会复制两部分，启用 `enableServerPlugins`，并在 `backups/` 备份原配置。它不修改酒馆核心源代码，也不复制或覆盖账号密钥、聊天和角色。
+仓库已公开。在酒馆“安装扩展”窗口填写 `https://github.com/Shalistera/SillyNAI.git`。这个窗口接受 HTTP/HTTPS 地址；SSH 地址用于终端里的 Git 命令。项目包含前端和服务端两部分。
 
-1. 在目标电脑安装或更新 SillyTavern。在酒馆根目录运行 `npm ci`，确保它本身能启动。
-2. 关闭酒馆，把安装包解压到任意目录。
-3. 在解压得到的 `novelai-story-illustrator` 目录运行：
+### 已通过 Git 安装：先用扩展更新修复
 
-   macOS / Linux：
+1. 在酒馆扩展管理中更新 SillyNAI，然后刷新浏览器。仍出现旧界面时强制刷新。
+2. 从“扩展 → NovelAI 小说配图 → 连接账号 / 测试出图”重新进入配置页，替换原来卡住的旧书签。新入口跟随当前扩展目录。
+3. 如果同时启用了旧离线版，点击新版设置里的“停用旧离线版并刷新”。此操作停用当前用户的旧版入口，保留文件和共用设置。其他酒馆用户各自管理启用状态。
+4. 页面会显示前端版本、实际服务端版本和功能状态，也可点击“重新检查服务端”。
 
-   ```sh
-   node install.mjs "/完整路径/SillyTavern"
-   ```
+| 服务端版本 | 常规出图、可视化编辑 | Large 高清重画 |
+| --- | --- | --- |
+| 0.4.x | 使用兼容模式 | 需更新服务端 |
+| 0.5.x | 可用 | 需更新服务端 |
+| 0.6.0+ | 可用 | 可用 |
+| 未安装、未启用或低于 0.4.0 | 需安装或更新服务端 | 需安装或更新服务端 |
 
-   Windows PowerShell：
+0.4.x 兼容模式把图片编辑结果转换成旧接口支持的字段：会去除提示词首尾空白，完整 Base 上限 12,000 字符，完整主 UC 与每个完整人物提示词上限分别为 8,000 字符。超限或使用空 Base 时会在出图前提示更新到 0.5.0+。
 
-   ```powershell
-   node .\install.mjs "D:\SillyTavern"
-   ```
+**酒馆的“更新扩展”只更新前端目录。** 旧服务端没有自更新接口，因此缺少服务端或要在旧服务端使用 Large 时，仍需在对应机器补一次服务端更新。酒馆 1.19 自带的 NovelAI 图片接口会丢弃独立角色提示词，无法替代本扩展服务端。
 
-4. 正常启动酒馆，例如在其根目录执行 `npm start`。
-5. 打开酒馆地址下的 `/api/plugins/novelai-story-illustrator/setup`。默认本地地址为：
+### 只安装或更新服务端
 
-   http://127.0.0.1:8000/api/plugins/novelai-story-illustrator/setup
-
-远程部署时，将 `127.0.0.1:8000` 换成你自己的酒馆地址。若酒馆启用了用户账号，请先登录需要使用的账号。插件复用酒馆的身份验证与 CSRF 防护。网络监听、域名和反向代理沿用你的酒馆部署方式。
-
-### 通过 Git 部署
-
-项目仓库为 `git@github.com:Shalistera/SillyNAI.git`。在酒馆所在机器上配置有该私有仓库读取权限的 SSH Key，然后执行：
+在运行酒馆的机器上，从已经更新的 Git 扩展目录执行：
 
 ```sh
-git clone git@github.com:Shalistera/SillyNAI.git
+node "/完整路径/SillyTavern/data/default-user/extensions/SillyNAI/install.mjs" "/完整路径/SillyTavern" --server-only
+```
+
+然后重启酒馆，刷新浏览器。为“所有用户”安装的扩展通常位于 `public/scripts/extensions/third-party/SillyNAI`，相应替换脚本路径。使用其他用户名、目录名或自定义数据目录时填写实际路径。
+
+`--server-only` 更新 `plugins/novelai-story-illustrator`，备份配置并启用 `enableServerPlugins`，保留已有 Git 前端、密钥、聊天、角色和图片。更新期间请暂停出图，命令完成后重启。
+
+官方 Docker 目录布局、容器名为 `sillytavern`、为默认用户安装扩展时：
+
+```sh
+docker exec sillytavern node /home/node/app/data/default-user/extensions/SillyNAI/install.mjs /home/node/app --server-only
+docker restart sillytavern
+```
+
+按实际情况替换容器名和路径；为所有用户安装时，脚本路径改为 `/home/node/app/public/scripts/extensions/third-party/SillyNAI/install.mjs`。参考酒馆官方 Compose，将 `plugins`、`data`、`config` 和全局扩展目录持久化挂载。安装器使用根目录 `config.yaml`，支持官方 Docker 指向 `config/config.yaml` 的符号链接；自定义 `--configPath` 部署还需在实际生效的配置中启用 `enableServerPlugins`。容器默认用户与安装目录所有者不同的，使用目录所有者运行命令。
+
+以后前端通过酒馆更新。若新版新增了服务端能力要求，从更新后的扩展目录再次运行同一条 `--server-only` 命令并重启；功能状态会提示是否需要。
+
+### 完整离线 / 终端部署
+
+需要 Node.js 20+ 和 SillyTavern 1.19.0+。在酒馆根目录运行 `npm ci`，确认能正常启动，然后关闭酒馆：
+
+```sh
+git clone https://github.com/Shalistera/SillyNAI.git
 cd SillyNAI
 node install.mjs "/完整路径/SillyTavern"
 ```
 
-以后升级时，在这个源码目录运行 `git pull --ff-only`，关闭酒馆，再运行安装命令并重启。酒馆的「安装扩展」界面只负责前端；本项目还需要服务端插件，因此完整部署使用上面的安装脚本。
+Windows PowerShell 使用 `node .\install.mjs "D:\SillyTavern"`。也可解压下载的安装包后执行。此方式复制前后端，启动后从扩展设置打开配置页。0.6.1 服务端也支持独立的 `/api/plugins/novelai-story-illustrator/setup` 入口并自行提供脚本资源。
+
+离线升级时，在源码目录执行 `git pull --ff-only` 或解压新版安装包，再次运行安装器、重启酒馆并刷新。前端已经改为 Git 安装的，使用 `--server-only`。
+
+远程部署使用自己的酒馆地址，并登录需要使用的账号。插件沿用酒馆的身份验证与 CSRF 防护。
 
 ## 连接 NovelAI
 

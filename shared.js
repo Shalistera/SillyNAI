@@ -1,7 +1,7 @@
 import { UC_PRESETS } from './uc-presets.js';
 export { UC_PRESETS, UC_SOURCE } from './uc-presets.js';
 export const ID = 'novelai-story-illustrator';
-export const VERSION = '0.6.0';
+export const VERSION = '0.6.1';
 export const STATE_KEY = 'nai_story_illustrator';
 export const MODELS = ['nai-diffusion-5-full', 'nai-diffusion-5-curated'];
 export const SIZES = { portrait: [832, 1216], landscape: [1216, 832], square: [1024, 1024] };

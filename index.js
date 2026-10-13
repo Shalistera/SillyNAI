@@ -1,12 +1,15 @@
-import { ID, STATE_KEY, UC_PRESETS, normalizeOptions, parseBlocks, composePrompts, resolveImageSize, promptInstruction, makeExampleScene } from './shared.js';
+import { ID, VERSION, STATE_KEY, UC_PRESETS, normalizeOptions, parseBlocks, composePrompts, resolveImageSize, promptInstruction, makeExampleScene } from './shared.js';
 import { ImageQueue, sameTarget, GenerationTracker } from './queue.js';
 import { openImageEditor, openLargeRedraw } from './editor.js';
 import { createLargeRedraw } from './editor-state.js';
+import { requestApi } from './api.js';
+import { serverCapabilities, serverSummary, prepareGeneration, LARGE_UPGRADE_MESSAGE } from './compatibility.js';
+import { findLegacyFrontend } from './migration.js';
 
 const context = () => SillyTavern.getContext();
 const queue = new ImageQueue();
 const statuses = new Map();
-const API = `/api/plugins/${ID}`;
+let capabilities = serverCapabilities();
 let ready = false;
 let readinessError = '请先在扩展设置中连接 NovelAI 账号，成功后刷新酒馆页面。';
 const generation = new GenerationTracker();
@@ -23,15 +26,7 @@ function ensureState(message) {
 }
 
 async function api(route, body, signal) {
-    const response = await fetch(`${API}/${route}`, {
-        method: body === undefined ? 'GET' : 'POST',
-        headers: context().getRequestHeaders(),
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal,
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error ?? (response.status === 404 ? '服务端插件尚未安装或启用，请按部署说明安装并重启酒馆。' : `请求失败（${response.status}）`));
-    return data;
+    return requestApi(route, body, context().getRequestHeaders(), signal);
 }
 
 function refresh(index) {
@@ -114,11 +109,13 @@ function enqueueImage(index, block, automatic = false, largeRedraw = null) {
             if (sameTarget(context(), target)) refresh(index);
         },
         async run(signal) {
+            await checkStatus();
             if (!ready) throw new Error(readinessError);
+            const request = prepareGeneration({ requestId: crypto.randomUUID(), scene: sceneSnapshot, options, imageOverrides }, capabilities);
             state.attempts[block.key] = { started: Date.now() };
             await save(target.message);
             if (!valid() || signal.aborted) throw new Error('原消息已变化，取消出图。');
-            return api('generate', { requestId: crypto.randomUUID(), scene: sceneSnapshot, options, imageOverrides }, signal);
+            return api('generate', request, signal);
         },
         async complete(result) {
             if (!localUrl(result.url)) throw new Error('返回的图片路径无效。');
@@ -188,10 +185,14 @@ function previewExample() {
     openImageEditor({ scene: makeExampleScene(settings()), options: settings(), previewOnly: true });
 }
 
-function redrawLarge(index, block) {
+async function redrawLarge(index, block) {
     const target = currentTarget(index);
     const record = sceneState(target.message)?.images?.[block.key];
     if (!record) return;
+    await checkStatus();
+    if (!ready) return toastr.error(readinessError, 'NovelAI 配图');
+    if (!capabilities.large) return toastr.warning(LARGE_UPGRADE_MESSAGE, 'NovelAI 高清重画');
+    if (!sameTarget(context(), target)) return;
     openLargeRedraw({
         record,
         onGenerate(parameters) {
@@ -237,12 +238,14 @@ async function checkStatus() {
     const statusElement = panel.querySelector('#nai-story-status');
     try {
         const status = await api('status');
-        if (!(status.promptSchema >= 3) || !(status.generationPolicy >= 5)) throw new Error('请安装 0.6.0 或更新的服务端插件并重启酒馆，以支持 Large 高清重画。');
-        ready = status.keySaved;
+        capabilities = serverCapabilities(status);
+        if (!capabilities.standard) throw new Error(serverSummary(capabilities));
+        ready = capabilities.keySaved;
         readinessError = '请先在“连接账号 / 测试出图”页面保存 NovelAI API Key。';
-        statusElement.textContent = status.keySaved ? '服务端已就绪，API Key 已保存。' : '服务端已就绪；请先连接账号。';
+        statusElement.textContent = `前端 ${VERSION} · ${serverSummary(capabilities)}`;
     } catch (error) {
         ready = false;
+        capabilities = serverCapabilities();
         readinessError = error.message;
         statusElement.textContent = error.message;
     }
@@ -270,6 +273,27 @@ async function init() {
     container.innerHTML = await response.text();
     panel = container.firstElementChild;
     document.querySelector('#extensions_settings2').append(panel);
+    panel.querySelector('#nai-story-setup').href = new URL('./setup.html', import.meta.url).href;
+    panel.querySelector('#nai-story-repair').href = new URL('./setup.html#installation', import.meta.url).href;
+    panel.querySelector('#nai-story-recheck').addEventListener('click', () => { void checkStatus(); });
+    try {
+        const legacy = await findLegacyFrontend(import.meta.url);
+        if (legacy) {
+            panel.querySelector('#nai-story-status').textContent = '检测到旧离线版与 Git 版同时启用。请先停用旧版并刷新，再使用本版本。';
+            const repair = panel.querySelector('#nai-story-cleanup');
+            repair.hidden = false;
+            repair.addEventListener('click', async () => {
+                repair.disabled = true;
+                try { await legacy.disable(); }
+                catch (error) { repair.disabled = false; toastr.error(`停用旧版失败：${error.message}`); }
+            });
+            return;
+        }
+    } catch (error) {
+        panel.querySelector('#nai-story-status').textContent = `旧版检测未完成：${error.message}。请刷新后重试；如有两份配图扩展，请在扩展管理中停用旧离线版。`;
+        return;
+    }
+    panel.querySelector('#nai-story-controls').hidden = false;
     for (const [id, preset] of Object.entries(UC_PRESETS)) {
         panel.querySelector('[data-option="ucPreset"]').add(new Option(preset.label, id));
     }
@@ -321,7 +345,7 @@ async function init() {
         const block = parseBlocks(message.mes).find(item => item.key === card.dataset.naiKey);
         if (!block) return;
         if (button.dataset.naiAction === 'generate') enqueueImage(index, block);
-        else if (button.dataset.naiAction === 'large') redrawLarge(index, block);
+        else if (button.dataset.naiAction === 'large') void redrawLarge(index, block);
         else if (button.dataset.naiAction === 'edit') editScene(index, block);
         else queue.cancel(job => job.index === index);
     });
@@ -340,4 +364,9 @@ async function init() {
     await checkStatus();
 }
 
-await init();
+const instanceKey = Symbol.for(`${ID}:frontend`);
+if (!globalThis[instanceKey]) {
+    globalThis[instanceKey] = import.meta.url;
+    try { await init(); }
+    catch (error) { delete globalThis[instanceKey]; throw error; }
+}

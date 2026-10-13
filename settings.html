@@ -6,8 +6,12 @@
     </div>
     <div class="inline-drawer-content">
       <p>让当前文字模型写小说和画面描述，用 NovelAI V5 在段落之间配图。</p>
-      <a class="menu_button" href="/api/plugins/novelai-story-illustrator/setup" target="_blank" rel="noopener">连接账号 / 测试出图</a>
+      <a id="nai-story-setup" class="menu_button" target="_blank" rel="noopener">连接账号 / 测试出图</a>
+      <a id="nai-story-repair" class="menu_button" target="_blank" rel="noopener">安装修复说明</a>
+      <button id="nai-story-recheck" type="button" class="menu_button">重新检查服务端</button>
       <div id="nai-story-status" role="status">正在检查服务端插件…</div>
+      <button id="nai-story-cleanup" type="button" class="menu_button" hidden>停用旧离线版并刷新</button>
+      <div id="nai-story-controls" hidden>
       <label class="checkbox_label"><input type="checkbox" data-option="enabled">启用小说配图</label>
       <label class="checkbox_label"><input type="checkbox" data-option="inject">自动向文字模型加入绘图要求</label>
       <small>已有预设会输出 &lt;nai_image&gt; 时，可关闭这一项。</small>
@@ -52,6 +56,7 @@
       <div class="nai-story-actions">
         <button type="button" class="menu_button" id="nai-story-copy">复制预设指令</button>
         <button type="button" class="menu_button" id="nai-story-cancel">取消配图队列</button>
+      </div>
       </div>
     </div>
   </div>

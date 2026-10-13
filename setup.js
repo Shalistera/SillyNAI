@@ -1,19 +1,22 @@
-import { ID, EXAMPLE_SCENE, DEFAULTS, UC_PRESETS, normalizeScene, composePrompts, resolveImageSize } from './shared.js';
+import { VERSION, EXAMPLE_SCENE, DEFAULTS, UC_PRESETS, normalizeScene, composePrompts, resolveImageSize } from './shared.js';
+import { fetchJson, requestApi } from './api.js';
+import { serverCapabilities, serverSummary, prepareGeneration } from './compatibility.js';
 const $ = selector => document.querySelector(selector);
-let csrf;
+let tokenPromise;
 let controller;
-const tokenReady = fetch('/csrf-token').then(response => response.json()).then(data => { csrf = data.token; });
+let capabilities = serverCapabilities();
+
+function csrfToken() {
+    tokenPromise ??= fetchJson('/csrf-token').then(data => {
+        if (typeof data.token !== 'string') throw new Error('无法获取酒馆 CSRF 令牌，请登录酒馆后重试。');
+        return data.token;
+    }).catch(error => { tokenPromise = null; throw error; });
+    return tokenPromise;
+}
 
 async function request(route, body, signal) {
-    await tokenReady;
-    const response = await fetch(`/api/plugins/${ID}/${route}`, {
-        method: body === undefined ? 'GET' : 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-        body: body === undefined ? undefined : JSON.stringify(body), signal,
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error ?? `请求失败（HTTP ${response.status}）。`);
-    return data;
+    const csrf = body === undefined ? undefined : await csrfToken();
+    return requestApi(route, body, { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }, signal);
 }
 
 function status(selector, text, error = false) {
@@ -51,6 +54,7 @@ $('#save-key').addEventListener('click', async () => {
     $('#token').value = '';
     try {
         await request('key', { key });
+        await checkService();
         status('#account-status', '密钥已保存。点击“检查连接与额度”验证账号。');
     } catch (error) { status('#account-status', error.message, true); }
 });
@@ -70,12 +74,15 @@ $('#generate').addEventListener('click', async () => {
     $('#cancel').disabled = false;
     controller = new AbortController();
     try {
+        await checkService();
+        $('#generate').disabled = true;
+        if (!capabilities.standard || !capabilities.keySaved) throw new Error(serverSummary(capabilities));
         const scene = normalizeScene(JSON.parse($('#scene').value));
         status('#image-status', '正在生成图片，请稍候…');
-        const result = await request('generate', {
+        const result = await request('generate', prepareGeneration({
             requestId: crypto.randomUUID(), scene,
             options: testOptions(),
-        }, controller.signal);
+        }, capabilities), controller.signal);
         if (!/^\/?user\/images\/novelai-story-illustrator\/[a-zA-Z0-9-]+\.png$/.test(result.url)) throw new Error('图片路径无效。');
         const img = document.createElement('img');
         img.src = `/${result.url.replace(/^\//, '')}`;
@@ -86,15 +93,23 @@ $('#generate').addEventListener('click', async () => {
         status('#image-status', error.name === 'AbortError' ? '已取消等待；若 NovelAI 已开始生成，额度可能已使用。请先检查图库。' : error.message, true);
     } finally {
         controller = null;
-        $('#generate').disabled = false;
+        $('#generate').disabled = !capabilities.standard || !capabilities.keySaved;
         $('#cancel').disabled = true;
     }
 });
 $('#cancel').addEventListener('click', () => controller?.abort());
-request('status').then(data => {
-    if (!(data.promptSchema >= 3) || !(data.generationPolicy >= 5)) {
-        $('#generate').disabled = true;
-        throw new Error('请更新到 0.6.0 或更新版本的服务端插件，并重启酒馆。');
+async function checkService() {
+    try {
+        capabilities = serverCapabilities(await request('status'));
+        status('#service-status', `前端 ${VERSION} · ${serverSummary(capabilities)}`, !capabilities.standard);
+        status('#account-status', capabilities.keySaved ? '已保存密钥。可检查 NovelAI 连接与额度。' : '请先粘贴并保存 API Key。');
+    } catch (error) {
+        capabilities = serverCapabilities();
+        status('#service-status', `前端 ${VERSION} · ${error.message}`, true);
+        status('#account-status', '服务端检查失败。请参阅本页安装修复说明，然后重新检查。', true);
+    } finally {
+        $('#generate').disabled = Boolean(controller) || !capabilities.standard || !capabilities.keySaved;
     }
-    status('#account-status', data.keySaved ? '服务端已就绪，已保存密钥。可直接检查连接。' : '服务端已就绪，请先粘贴并保存 API Key。');
-}).catch(error => status('#account-status', error.message, true));
+}
+$('#recheck-service').addEventListener('click', () => { void checkService(); });
+await checkService();

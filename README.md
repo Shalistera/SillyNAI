@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 An inline illustration extension for [SillyTavern](https://github.com/SillyTavern/SillyTavern). Your existing text model writes the story and image descriptions; NovelAI V5 generates the illustrations. Images appear next to the passages they illustrate and are saved in the current SillyTavern user's image directory.
 
-**Version: 0.6.0** · Node.js 20+ · SillyTavern 1.19.0+
+**Version: 0.6.1** · Node.js 20+ · SillyTavern 1.19.0+
 
 The extension currently has a Chinese interface. This README includes the relevant Chinese control labels.
 
@@ -24,49 +24,64 @@ NovelAI V5 Full is the default image model. V5 Curated is also available. The ex
 
 ## Installation
 
-This repository contains a **frontend extension and a server plugin**. Run the installer on the machine that hosts SillyTavern.
+This repository contains a **frontend extension and a server plugin**. The repository is public; use `https://github.com/Shalistera/SillyNAI.git` in SillyTavern's **Install extension** dialog. The dialog accepts HTTP/HTTPS URLs. SSH cloning is also available from a terminal.
 
-1. Install or update SillyTavern, run `npm ci` in its root directory, and confirm that it starts normally.
-2. Stop SillyTavern.
-3. Clone this repository using an SSH key with access to it:
+### Updating an existing Git installation (0.6.1 repair)
 
-   ```sh
-   git clone git@github.com:Shalistera/SillyNAI.git
-   cd SillyNAI
-   ```
+1. Click **Update** for SillyNAI in SillyTavern's extension manager, then refresh the browser (use a hard refresh if old files remain cached).
+2. Open **Extensions → NovelAI 小说配图 → 连接账号 / 测试出图** again. This opens the setup page from the current extension directory. Replace any old setup bookmark that still hangs.
+3. If the extension detects the original offline copy alongside the Git copy, click **停用旧离线版并刷新** (Disable the old offline copy and reload). This disables that copy for the current user and preserves its files and shared settings. Other users have their own enabled-extension settings.
+4. The settings panel and setup page show the frontend version, actual backend version, and supported features. **重新检查服务端** refreshes the status.
 
-4. Install both components:
+Version 0.6.1 fixes the hardcoded offline path that caused setup to remain at “正在检查本地服务…”. It also restores standard generation with older compatible backends instead of requiring Large support for every image:
 
-   macOS / Linux:
+| Installed server plugin | Standard generation and visual editing | Large redraw |
+| --- | --- | --- |
+| 0.4.x | Supported through compatibility translation | Requires server update |
+| 0.5.x | Supported | Requires server update |
+| 0.6.0+ | Supported | Supported |
+| Missing, disabled, or older than 0.4.0 | Requires server installation/update | Requires server installation/update |
 
-   ```sh
-   node install.mjs "/absolute/path/to/SillyTavern"
-   ```
+For 0.4.x, edited Base and UC are translated into the legacy request fields. That backend trims outer whitespace and limits complete Base to 12,000 characters, main UC to 8,000, and each complete character prompt to 8,000; an empty edited Base also requires 0.5.0+. The frontend reports these limits before generation rather than dropping edited content.
 
-   Windows PowerShell:
+**SillyTavern's extension Update button only updates frontend files.** Existing server plugins do not expose an update endpoint. If the backend is absent or you need Large on an older backend, perform the server-only update below once on each affected server. The built-in SillyTavern 1.19 NovelAI image endpoint cannot replace this backend because it discards separate character captions.
 
-   ```powershell
-   node .\install.mjs "D:\SillyTavern"
-   ```
+### Server-only installation or update
 
-5. Start SillyTavern again and refresh your browser.
-6. Open `/api/plugins/novelai-story-illustrator/setup` on your SillyTavern server. With the default local port, this is [http://127.0.0.1:8000/api/plugins/novelai-story-illustrator/setup](http://127.0.0.1:8000/api/plugins/novelai-story-illustrator/setup).
-
-A downloaded archive can be extracted instead of cloning. Run the same installer from the extracted directory.
-
-The installer copies both components, enables `enableServerPlugins`, and backs up the configuration before changing that setting. Existing chats, characters, credentials, and other configuration values are preserved. No SillyTavern core source changes or additional npm dependencies are required by this extension.
-
-SillyTavern's built-in Git extension installer installs the frontend only. Use the provided script for a complete deployment, including the server component. For a private repository, SSH authentication must work on the **server**, even when you open SillyTavern in a browser on another machine.
-
-### Updates
-
-In the cloned source directory:
+On the machine running SillyTavern, run the installer from the Git extension directory:
 
 ```sh
-git pull --ff-only
+node "/absolute/path/to/SillyTavern/data/default-user/extensions/SillyNAI/install.mjs" "/absolute/path/to/SillyTavern" --server-only
 ```
 
-Stop SillyTavern, rerun `node install.mjs "/absolute/path/to/SillyTavern"`, restart the server, and refresh the browser. Version 0.6.0 checks server capability `generationPolicy >= 5` so an older backend cannot silently ignore Large dimensions.
+Then restart SillyTavern and refresh the browser. For an extension installed **for all users**, use `public/scripts/extensions/third-party/SillyNAI/install.mjs` instead. Replace `default-user` and the folder name when applicable; custom data roots use their actual paths.
+
+`--server-only` copies the server component into `plugins/novelai-story-illustrator`, enables `enableServerPlugins` with a configuration backup, and keeps the existing Git frontend. It does not create another offline frontend. User credentials, chats, characters, and image files are preserved. Avoid issuing image requests while updating, and restart after the command completes.
+
+For a Docker container named `sillytavern` using the official directory layout and a per-user Git installation:
+
+```sh
+docker exec sillytavern node /home/node/app/data/default-user/extensions/SillyNAI/install.mjs /home/node/app --server-only
+docker restart sillytavern
+```
+
+Replace the container name and paths for your deployment. For an all-user installation, replace the script path with `/home/node/app/public/scripts/extensions/third-party/SillyNAI/install.mjs`. Keep the `plugins`, `data`, `config`, and global extensions directories on persistent volumes, as in the official SillyTavern Compose configuration. The installer uses the root `config.yaml`, including the official Docker image's symlink to `config/config.yaml`; deployments with a custom `--configPath` must enable `enableServerPlugins` in that active configuration as well. Run the command as the user that owns the installation if permissions differ from the container default.
+
+Later frontend updates use SillyTavern's Update button. When a release changes required backend capabilities, rerun the same server-only command from the updated checkout and restart. The compatibility status explains which features need it.
+
+### Complete offline or terminal installation
+
+Install SillyTavern 1.19.0+ with Node.js 20+, run `npm ci` in its root, and confirm it starts normally. Stop SillyTavern, then:
+
+```sh
+git clone https://github.com/Shalistera/SillyNAI.git
+cd SillyNAI
+node install.mjs "/absolute/path/to/SillyTavern"
+```
+
+Windows PowerShell: `node .\install.mjs "D:\SillyTavern"`. A downloaded archive can be extracted instead of cloning. Start SillyTavern and open the connection page from the extension settings. The server's standalone `/api/plugins/novelai-story-illustrator/setup` route also works after installing the 0.6.1 server component; it now serves its own scripts.
+
+For later offline updates, run `git pull --ff-only` in the source checkout (or extract a newer archive), rerun the installer, restart SillyTavern, and refresh the browser. Use `--server-only` if you have switched the frontend to a Git installation.
 
 ## Connect NovelAI
 

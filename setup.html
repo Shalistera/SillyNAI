@@ -17,6 +17,19 @@
   <div class="eyebrow">SILLYTAVERN × NOVELAI V5</div>
   <h1>让小说的画面，出现在段落之间。</h1>
   <p>在这台酒馆上连接你的 NovelAI 账号并测试一张插图。写小说仍使用你原来的文字模型。</p>
+  <section id="installation">
+    <h2>安装状态与修复</h2>
+    <div id="service-status" class="status" role="status">正在检查服务端…</div>
+    <p><button id="recheck-service" class="secondary">重新检查服务端</button></p>
+    <small>更新到 0.6.1 后，请从酒馆扩展设置重新打开“连接账号 / 测试出图”。这个入口使用当前 Git 扩展的文件。旧服务端保存的 /setup 书签可能仍指向已经卸载的离线版。</small>
+    <details><summary>安装修复说明（Linux / Docker）</summary>
+      <p>常规出图和可视化编辑支持服务端 0.4.0+；Large 高清重画需要 0.6.0+。只更新前端即可恢复旧服务端支持的功能。两份扩展同时启用时，回到新版扩展设置，点击“停用旧离线版并刷新”。</p>
+      <p>酒馆的“更新扩展”只更新前端目录。若服务端缺失或需要 Large，请在运行酒馆的机器（Docker 则在容器中）执行一次下面的更新，再重启酒馆。把路径替换成自己的实际路径：</p>
+      <pre style="white-space:pre-wrap;overflow-wrap:anywhere"><code>node "/path/to/SillyTavern/data/default-user/extensions/SillyNAI/install.mjs" "/path/to/SillyTavern" --server-only</code></pre>
+      <small>“为所有用户安装”的扩展通常位于 public/scripts/extensions/third-party/SillyNAI；为当前用户安装的位于 data/用户名/extensions/SillyNAI。Docker 使用容器内的路径，plugins 目录需持久化。--server-only 更新服务端，保留现有 Git 前端、账号密钥和聊天。</small>
+      <p><a href="https://github.com/Shalistera/SillyNAI#installation" target="_blank" rel="noopener">完整安装和更新说明 ↗</a></p>
+    </details>
+  </section>
   <section>
     <h2>1 · 连接账号</h2>
     <p>从 NovelAI 的 Settings → Account → Get Persistent API Token 获取密钥，然后粘贴到下面。密钥保存到当前酒馆用户的服务端密钥库。</p>
@@ -44,7 +57,7 @@
     <small>这里的固定 Base 仅用于这次测试。小说自动配图的固定 Base 请在酒馆扩展设置中填写。</small>
     <label><input id="allow-anlas" type="checkbox"> 允许这次测试消耗 Anlas</label>
     <small>仅使用三种常规尺寸，采用 23 步、单张图片。默认检查 Opus 与 V5 免费额度；实际尺寸和主 UC 见上方预览，计费以 NovelAI 为准。</small>
-    <div class="row" style="margin-top:16px"><button id="generate">生成一张测试图片</button><button id="cancel" class="secondary" disabled>取消等待</button></div>
+    <div class="row" style="margin-top:16px"><button id="generate" disabled>生成一张测试图片</button><button id="cancel" class="secondary" disabled>取消等待</button></div>
     <div id="image-status" class="status" role="status">等待测试。</div>
     <div id="preview"></div>
   </section>
@@ -54,5 +67,11 @@
     <small>如果你想自己修改预设，可关闭「自动向文字模型加入绘图要求」，并使用扩展里的「复制预设指令」。这两种方式使用同一套图片接口。</small>
     <p><a class="button secondary" href="/">打开酒馆 →</a></p>
   </section>
-</main><script type="module" src="/scripts/extensions/third-party/novelai-story-illustrator/setup.js"></script></body>
+</main><script type="module">
+  import('./setup.js').catch(() => {
+    document.querySelector('#service-status').textContent = '设置脚本加载失败。请更新扩展、强制刷新，并从酒馆扩展设置重新打开本页。';
+    document.querySelector('#service-status').classList.add('error');
+    document.querySelector('#account-status').textContent = '脚本未就绪，请查看上方安装修复说明。';
+  });
+</script></body>
 </html>

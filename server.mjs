@@ -77,4 +77,10 @@ export async function init(router) {
     router.get('/setup', wrap(async (req, res) => {
         res.type('html').send(await fs.readFile(fileURLToPath(new URL('./setup.html', import.meta.url)), 'utf8'));
     }));
+    // Keep the server's standalone page independent of frontend install paths.
+    for (const asset of ['setup.js', 'shared.js', 'uc-presets.js', 'api.js', 'compatibility.js']) {
+        router.get(`/${asset}`, wrap(async (req, res) => {
+            res.type('js').send(await fs.readFile(fileURLToPath(new URL(`./${asset}`, import.meta.url)), 'utf8'));
+        }));
+    }
 }

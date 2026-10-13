@@ -49,3 +49,4 @@
 .nai-prompt-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #14181d; border: 1px solid #465249; border-radius: 6px; padding: 12px; font: 13px/1.7 ui-monospace, monospace; color: #eef3ee; }
 .nai-uc-text { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, monospace; padding: 10px; background: #0002; border-radius: 6px; }
 @media (max-width: 480px) { .nai-story-grid { grid-template-columns: 1fr; } .nai-story-editor { padding: 14px; } .nai-visual-editor, .nai-large-editor { padding: 0; } }
+.nai-story-settings [hidden] { display: none !important; }

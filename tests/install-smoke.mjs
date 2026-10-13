@@ -16,6 +16,13 @@ try {
     await fs.writeFile(path.join(target, 'config.yaml'), original);
     await fs.mkdir(path.join(target, 'data'), { recursive: true });
     await fs.writeFile(path.join(target, 'data/do-not-touch.txt'), 'user data');
+    const gitFrontend = path.join(target, 'data/default-user/extensions/SillyNAI');
+    const offlineFrontend = path.join(target, 'public/scripts/extensions/third-party/novelai-story-illustrator');
+    await fs.mkdir(gitFrontend, { recursive: true });
+    await fs.writeFile(path.join(gitFrontend, 'sentinel.txt'), 'keep Git checkout');
+    execFileSync(process.execPath, [path.join(source, 'install.mjs'), target, '--server-only'], { stdio: 'pipe' });
+    await assert.rejects(fs.access(offlineFrontend), { code: 'ENOENT' });
+    assert.equal(await fs.readFile(path.join(gitFrontend, 'sentinel.txt'), 'utf8'), 'keep Git checkout');
     for (let i = 0; i < 2; i++) execFileSync(process.execPath, [path.join(source, 'install.mjs'), target], { stdio: 'pipe' });
     const updated = await fs.readFile(path.join(target, 'config.yaml'), 'utf8');
     assert.match(updated, /enableServerPlugins: true/);
@@ -30,7 +37,19 @@ try {
     for (const file of ['plugins/novelai-story-illustrator/server.mjs', 'plugins/novelai-story-illustrator/service.mjs', 'plugins/novelai-story-illustrator/uc-presets.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/index.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/editor.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/editor-state.js', 'public/scripts/extensions/third-party/novelai-story-illustrator/uc-presets.js']) {
         assert.equal(await fs.readFile(path.join(target, file), 'utf8'), await fs.readFile(path.join(source, path.basename(file)), 'utf8'));
     }
-    console.log('Installer smoke test passed: both components copied, repeated install safe, config preserved, backup correct, user data untouched.');
+    for (const dir of [path.join(target, 'plugins/novelai-story-illustrator'), offlineFrontend]) {
+        for (const file of ['setup.html', 'setup.js', 'api.js', 'compatibility.js', 'shared.js', 'uc-presets.js']) {
+            assert.equal(await fs.readFile(path.join(dir, file), 'utf8'), await fs.readFile(path.join(source, file), 'utf8'));
+        }
+    }
+    // The official Docker image uses a config.yaml symlink to its config volume.
+    await fs.mkdir(path.join(target, 'config'));
+    await fs.rename(path.join(target, 'config.yaml'), path.join(target, 'config/config.yaml'));
+    await fs.symlink('./config/config.yaml', path.join(target, 'config.yaml'));
+    execFileSync(process.execPath, [path.join(source, 'install.mjs'), target, '--server-only'], { stdio: 'pipe' });
+    assert.equal((await fs.lstat(path.join(target, 'config.yaml'))).isSymbolicLink(), true);
+    assert.equal(await fs.readFile(path.join(target, 'config/config.yaml'), 'utf8'), updated);
+    console.log('Installer smoke test passed: server-only preserves Git frontend; full/repeated installs include standalone assets; Docker config symlink, backups and user data preserved.');
 } finally {
     await fs.rm(target, { recursive: true, force: true });
 }
